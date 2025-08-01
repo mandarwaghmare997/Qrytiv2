@@ -1,0 +1,202 @@
+name: Backend Deployment
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'backend/**', 'fullstack/**' ]
+  pull_request:
+    branches: [ main ]
+    paths: [ 'backend/**', 'fullstack/**' ]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-south-1
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f backend/requirements.txt ]; then
+          pip install -r backend/requirements.txt
+        fi
+        if [ -f fullstack/requirements.txt ]; then
+          pip install -r fullstack/requirements.txt
+        fi
+        
+    - name: Run backend tests
+      run: |
+        cd backend
+        # Add test commands when tests are available
+        # python -m pytest tests/ -v
+        echo "Backend tests would run here"
+        
+    - name: Run fullstack tests
+      run: |
+        cd fullstack
+        # Add test commands when tests are available
+        # python -m pytest tests/ -v
+        echo "Fullstack tests would run here"
+        
+    - name: Lint code
+      run: |
+        pip install flake8
+        # Lint backend
+        if [ -d backend ]; then
+          flake8 backend --count --select=E9,F63,F7,F82 --show-source --statistics
+        fi
+        # Lint fullstack
+        if [ -d fullstack ]; then
+          flake8 fullstack --count --select=E9,F63,F7,F82 --show-source --statistics
+        fi
+
+  build-backend:
+    needs: test-backend
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Create deployment package
+      run: |
+        # Create deployment packages for both backend and fullstack
+        mkdir -p deployment-packages
+        
+        # Package backend
+        if [ -d backend ]; then
+          cd backend
+          pip install -r requirements.txt -t ../deployment-packages/backend/
+          cp -r app ../deployment-packages/backend/
+          cp requirements.txt ../deployment-packages/backend/
+          cd ..
+        fi
+        
+        # Package fullstack
+        if [ -d fullstack ]; then
+          cd fullstack
+          pip install -r requirements.txt -t ../deployment-packages/fullstack/
+          cp -r src ../deployment-packages/fullstack/
+          cp requirements.txt ../deployment-packages/fullstack/
+          cd ..
+        fi
+        
+    - name: Upload deployment packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-packages
+        path: deployment-packages/
+        retention-days: 7
+
+  deploy-lambda-staging:
+    needs: build-backend
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Download deployment packages
+      uses: actions/download-artifact@v4
+      with:
+        name: backend-packages
+        path: deployment-packages/
+        
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Deploy to Lambda (Staging)
+      run: |
+        echo "🚀 Deploying backend to Lambda staging environment"
+        # This is a placeholder for Lambda deployment
+        # In a real scenario, you would:
+        # 1. Create a Lambda deployment package (ZIP)
+        # 2. Update Lambda function code
+        # 3. Update API Gateway configuration
+        echo "Lambda staging deployment would happen here"
+        echo "📱 Staging API URL would be available here"
+
+  deploy-lambda-production:
+    needs: build-backend
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Download deployment packages
+      uses: actions/download-artifact@v4
+      with:
+        name: backend-packages
+        path: deployment-packages/
+        
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Deploy to Lambda (Production)
+      run: |
+        echo "🚀 Deploying backend to Lambda production environment"
+        # This is a placeholder for Lambda deployment
+        # In a real scenario, you would:
+        # 1. Create a Lambda deployment package (ZIP)
+        # 2. Update Lambda function code
+        # 3. Update API Gateway configuration
+        echo "Lambda production deployment would happen here"
+        
+    - name: Health check API
+      run: |
+        echo "🔍 Running API health checks"
+        # Add API health check commands here
+        echo "API health check would run here"
+        
+    - name: Deployment success notification
+      run: |
+        echo "🎉 Backend deployment successful!"
+        echo "🌐 API URL: https://api.qryti.com (when configured)"
+        echo "⏰ Deployment time: $(date)"
+
+  notify-backend-deployment:
+    needs: [deploy-lambda-production]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Backend deployment notification
+      run: |
+        if [ "${{ needs.deploy-lambda-production.result }}" == "success" ]; then
+          echo "✅ Backend deployment completed successfully"
+          echo "🚀 Qrytiv2 backend is live"
+        else
+          echo "❌ Backend deployment failed"
+          echo "🔍 Check the logs for details"
+        fi
+

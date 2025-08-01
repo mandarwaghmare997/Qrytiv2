@@ -1,0 +1,55 @@
+{
+  "name": "qrytiv2",
+  "version": "1.0.0",
+  "description": "ISO 42001 AI Governance Platform",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "cd frontend && pnpm dev",
+    "dev:backend": "cd backend && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "dev:fullstack": "cd fullstack && python src/main.py",
+    "build": "npm run build:frontend",
+    "build:frontend": "cd frontend && pnpm build",
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "cd frontend && pnpm test",
+    "test:backend": "cd backend && python -m pytest",
+    "lint": "npm run lint:frontend && npm run lint:backend",
+    "lint:frontend": "cd frontend && pnpm lint",
+    "lint:backend": "cd backend && flake8 .",
+    "format": "npm run format:frontend && npm run format:backend",
+    "format:frontend": "cd frontend && pnpm format",
+    "format:backend": "cd backend && black . && isort .",
+    "deploy:staging": "./scripts/deploy.sh staging",
+    "deploy:production": "./scripts/deploy.sh production",
+    "deploy:frontend": "./scripts/deploy.sh staging frontend",
+    "deploy:backend": "./scripts/deploy.sh staging backend",
+    "health-check": "curl -f https://app.qryti.com || exit 1",
+    "setup": "npm run setup:frontend && npm run setup:backend",
+    "setup:frontend": "cd frontend && pnpm install",
+    "setup:backend": "cd backend && pip install -r requirements.txt",
+    "clean": "npm run clean:frontend && npm run clean:backend",
+    "clean:frontend": "cd frontend && rm -rf dist node_modules",
+    "clean:backend": "cd backend && find . -type d -name __pycache__ -delete"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": [
+    "iso-42001",
+    "ai-governance",
+    "compliance",
+    "risk-management",
+    "qryti"
+  ],
+  "author": "Qryti Dev Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mandarwaghmare997/Qrytiv2.git"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}
+
