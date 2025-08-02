@@ -5,7 +5,7 @@ import config from './config.js';
 import AIModelRegistry from './components/AIModelRegistry.jsx';
 import AdminDashboardNew from './components/AdminDashboardNew.jsx';
 import ISO42001Compliance from './components/ISO42001Compliance.jsx';
-import GapAssessment from './components/GapAssessment.jsx';
+import GapAssessmentNew from './components/GapAssessmentNew.jsx';
 import qrytiLogo from './assets/qryti-logo.png';
 import './components/AIModelRegistry.css';
 
@@ -42,6 +42,7 @@ function App() {
         const userData = apiService.getUser();
         if (userData) {
           setUser(userData);
+          setCurrentView(userData.role === 'admin' ? 'admin' : 'dashboard');
           apiService.startSessionRefresh();
         } else {
           // Token exists but no user data, try to get session info
@@ -55,8 +56,12 @@ function App() {
                 role: sessionInfo.email === 'hello@qryti.com' ? 'admin' : 'user'
               };
               setUser(userFromSession);
+              setCurrentView(userFromSession.role === 'admin' ? 'admin' : 'dashboard');
               apiService.setUser(userFromSession);
               apiService.startSessionRefresh();
+            } else {
+              // Invalid session, clear auth
+              apiService.logout();
             }
           } catch (error) {
             // Session invalid, clear auth
@@ -274,8 +279,10 @@ function App() {
             ) : (
               <form onSubmit={handleOtpVerification} className="otp-form">
                 <div className="otp-header">
-                  <h3>🔐 Verify New Device</h3>
-                  <p>We've sent a verification code to <strong>{otpForm.email}</strong></p>
+                  <div className="otp-icon">🔐</div>
+                  <h3>Verify New Device</h3>
+                  <p>We've sent a verification code to</p>
+                  <p className="email-highlight">{otpForm.email}</p>
                   <p className="otp-note">Check your email for the 6-digit code</p>
                 </div>
 
@@ -318,8 +325,15 @@ function App() {
 
                 <div className="otp-actions">
                   <button 
+                    type="submit" 
+                    className="verify-btn primary" 
+                    disabled={loading || otpForm.otpCode.length !== 6}
+                  >
+                    {loading ? 'Verifying...' : 'Verify & Login'}
+                  </button>
+                  <button 
                     type="button" 
-                    className="back-btn"
+                    className="back-btn secondary"
                     onClick={() => {
                       setShowOtpForm(false);
                       setError('');
@@ -327,13 +341,6 @@ function App() {
                     disabled={loading}
                   >
                     ← Back to Login
-                  </button>
-                  <button 
-                    type="submit" 
-                    className="verify-btn" 
-                    disabled={loading || otpForm.otpCode.length !== 6}
-                  >
-                    {loading ? 'Verifying...' : 'Verify & Login'}
                   </button>
                 </div>
               </form>
@@ -457,7 +464,7 @@ function App() {
         />
       )}
       {currentView === 'gap-assessment' && (
-        <GapAssessment 
+        <GapAssessmentNew 
           user={user} 
           onNavigate={handleNavigate}
           onLogout={handleLogout}

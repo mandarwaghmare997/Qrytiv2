@@ -7,7 +7,20 @@ class ApiService {
   constructor() {
     this.baseURL = config.API_BASE_URL;
     this.token = localStorage.getItem('auth_token');
-    this.user = JSON.parse(localStorage.getItem('user_data') || 'null');
+    this.user = this.loadUserFromStorage();
+    this.sessionRefreshInterval = null;
+  }
+
+  // Load user data from localStorage with error handling
+  loadUserFromStorage() {
+    try {
+      const userData = localStorage.getItem('user_data');
+      return userData ? JSON.parse(userData) : null;
+    } catch (error) {
+      console.error('Error loading user data from localStorage:', error);
+      localStorage.removeItem('user_data');
+      return null;
+    }
   }
 
   // Set authentication token and user data
@@ -22,11 +35,15 @@ class ApiService {
     }
   }
 
-  // Set user data
+  // Set user data with persistence
   setUser(userData) {
     this.user = userData;
     if (userData) {
-      localStorage.setItem('user_data', JSON.stringify(userData));
+      try {
+        localStorage.setItem('user_data', JSON.stringify(userData));
+      } catch (error) {
+        console.error('Error saving user data to localStorage:', error);
+      }
     } else {
       localStorage.removeItem('user_data');
     }
@@ -34,7 +51,43 @@ class ApiService {
 
   // Get user data
   getUser() {
+    if (!this.user) {
+      this.user = this.loadUserFromStorage();
+    }
     return this.user;
+  }
+
+  // Check if user is authenticated
+  isAuthenticated() {
+    return !!(this.token && this.getUser());
+  }
+
+  // Start session refresh interval
+  startSessionRefresh() {
+    // Clear any existing interval
+    if (this.sessionRefreshInterval) {
+      clearInterval(this.sessionRefreshInterval);
+    }
+
+    // Refresh session every 5 minutes
+    this.sessionRefreshInterval = setInterval(async () => {
+      try {
+        if (this.isAuthenticated()) {
+          await this.getSessionInfo();
+        }
+      } catch (error) {
+        console.error('Session refresh failed:', error);
+        // Don't logout on refresh failure, just log the error
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+  }
+
+  // Stop session refresh
+  stopSessionRefresh() {
+    if (this.sessionRefreshInterval) {
+      clearInterval(this.sessionRefreshInterval);
+      this.sessionRefreshInterval = null;
+    }
   }
 
   // Get authentication headers
@@ -65,8 +118,7 @@ class ApiService {
       // Handle session expiry
       if (response.status === 401) {
         this.logout();
-        window.location.reload();
-        return;
+        throw new Error('Session expired. Please login again.');
       }
       
       if (!response.ok) {
@@ -97,6 +149,7 @@ class ApiService {
     if (response.access_token) {
       this.setToken(response.access_token);
       this.setUser(response.user);
+      this.startSessionRefresh();
     }
 
     return response;
@@ -200,6 +253,7 @@ class ApiService {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      this.stopSessionRefresh();
       this.setToken(null);
       this.setUser(null);
     }
