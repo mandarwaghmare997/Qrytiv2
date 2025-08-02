@@ -40,8 +40,9 @@ class Control(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
-    stage = relationship("Stage", back_populates="controls")
+    assessment = relationship("Assessment", back_populates="controls")
     evidence = relationship("Evidence", back_populates="control")
+    ai_model = relationship("AIModel", back_populates="controls")
     
     def __repr__(self):
         return f"<Control(id={self.id}, code='{self.control_code}', title='{self.title}')>"

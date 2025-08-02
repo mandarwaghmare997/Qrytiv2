@@ -34,8 +34,11 @@ class Organization(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     
     # Relationships
-    users = relationship("User", back_populates="organization", cascade="all, delete-orphan")
-    assessments = relationship("Assessment", back_populates="organization", cascade="all, delete-orphan")
+    users = relationship("User", back_populates="organization")
+    assessments = relationship("Assessment", back_populates="organization")
+    ai_models = relationship("AIModel", back_populates="organization")
+    requirement_assessments = relationship("RequirementAssessment", back_populates="organization")
+    gap_analyses = relationship("GapAnalysis", back_populates="organization")
     audit_logs = relationship("AuditLog", back_populates="organization", cascade="all, delete-orphan")
     
     def __repr__(self):

@@ -111,35 +111,19 @@
   font-size: 14px;
 }
 
-.demo-credentials {
+.forgot-password {
   text-align: center;
   margin-bottom: 20px;
 }
 
-.demo-credentials p {
-  margin-bottom: 12px;
-  color: #666;
+.forgot-link {
+  color: #6366f1;
+  text-decoration: none;
   font-size: 14px;
 }
 
-.demo-buttons {
-  display: flex;
-  gap: 10px;
-}
-
-.demo-button {
-  flex: 1;
-  padding: 8px 12px;
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: background-color 0.2s ease;
-}
-
-.demo-button:hover {
-  background: #e9ecef;
+.forgot-link:hover {
+  text-decoration: underline;
 }
 
 .api-status {
@@ -245,12 +229,26 @@
   margin-bottom: 40px;
 }
 
-.dashboard-card {
-  background: white;
-  padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e9ecef;
+.dashboard-card.clickable {
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.dashboard-card.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.card-action {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.card-action span {
+  color: #6366f1;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .dashboard-card h3 {

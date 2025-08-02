@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import apiService from './services/api.js';
 import config from './config.js';
+import AIModelRegistry from './components/AIModelRegistry.jsx';
+import './components/AIModelRegistry.css';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -9,6 +11,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [apiStatus, setApiStatus] = useState('checking');
+  const [currentView, setCurrentView] = useState('dashboard'); // dashboard, ai-models
 
   // Login form state
   const [loginForm, setLoginForm] = useState({
@@ -63,14 +66,6 @@ function App() {
     setUser(null);
   };
 
-  const fillDemoCredentials = (userType) => {
-    const demoUser = config.DEMO_USERS[userType];
-    setLoginForm({
-      email: demoUser.email,
-      password: demoUser.password
-    });
-  };
-
   // Login form component
   const LoginForm = () => (
     <div className="login-container">
@@ -114,24 +109,8 @@ function App() {
           </button>
         </form>
 
-        <div className="demo-credentials">
-          <p>Demo Credentials:</p>
-          <div className="demo-buttons">
-            <button 
-              type="button" 
-              onClick={() => fillDemoCredentials('admin')}
-              className="demo-button"
-            >
-              Admin User
-            </button>
-            <button 
-              type="button" 
-              onClick={() => fillDemoCredentials('user')}
-              className="demo-button"
-            >
-              Regular User
-            </button>
-          </div>
+        <div className="forgot-password">
+          <a href="#" className="forgot-link">Forgot Password?</a>
         </div>
 
         <div className="api-status">
@@ -169,12 +148,15 @@ function App() {
             </div>
           </div>
 
-          <div className="dashboard-card">
+          <div className="dashboard-card clickable" onClick={() => setCurrentView('ai-models')}>
             <h3>AI Model Registry</h3>
             <p>Manage your AI models and their lifecycle</p>
             <div className="stat">
               <span className="stat-number">12</span>
               <span className="stat-label">Active Models</span>
+            </div>
+            <div className="card-action">
+              <span>Click to manage →</span>
             </div>
           </div>
 
@@ -209,9 +191,28 @@ function App() {
     </div>
   );
 
+  const renderCurrentView = () => {
+    if (!isAuthenticated) {
+      return <LoginForm />;
+    }
+
+    switch (currentView) {
+      case 'ai-models':
+        return (
+          <AIModelRegistry 
+            user={user} 
+            onBack={() => setCurrentView('dashboard')} 
+          />
+        );
+      case 'dashboard':
+      default:
+        return <Dashboard />;
+    }
+  };
+
   return (
     <div className="App">
-      {isAuthenticated ? <Dashboard /> : <LoginForm />}
+      {renderCurrentView()}
     </div>
   );
 }

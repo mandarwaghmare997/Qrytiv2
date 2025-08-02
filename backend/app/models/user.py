@@ -46,6 +46,7 @@ class User(Base):
     
     # Relationships
     organization = relationship("Organization", back_populates="users")
+    created_models = relationship("AIModel", back_populates="creator")
     led_assessments = relationship("Assessment", back_populates="assessment_lead")
     uploaded_evidence = relationship("Evidence", back_populates="uploaded_by_user")
     audit_logs = relationship("AuditLog", back_populates="user")
