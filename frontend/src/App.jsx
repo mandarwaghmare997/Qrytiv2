@@ -5,6 +5,7 @@ import config from './config.js';
 import AIModelRegistry from './components/AIModelRegistry.jsx';
 import AdminDashboard from './components/AdminDashboard.jsx';
 import ISO42001Compliance from './components/ISO42001Compliance.jsx';
+import GapAssessmentProfessional from './components/GapAssessmentProfessional.jsx';
 import qrytiLogo from './assets/qryti-logo.png';
 import './components/AIModelRegistry.css';
 
@@ -40,9 +41,17 @@ function App() {
 
   const checkAuthStatus = async () => {
     const token = apiService.getToken();
+    const storedUser = apiService.getUser();
+    
     if (token) {
+      // If we have stored user data, use it immediately
+      if (storedUser) {
+        setUser(storedUser);
+        setIsAuthenticated(true);
+      }
+      
       try {
-        // Validate token and get user info
+        // Validate token and get fresh user info
         const response = await fetch(`${config.API_BASE_URL}/auth/me`, {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -53,13 +62,22 @@ function App() {
           const userData = await response.json();
           setUser(userData);
           setIsAuthenticated(true);
+          // Update stored user data
+          apiService.setToken(token, userData);
         } else {
           // Token is invalid, remove it
           apiService.removeToken();
+          setUser(null);
+          setIsAuthenticated(false);
         }
       } catch (error) {
         console.error('Auth check failed:', error);
-        apiService.removeToken();
+        // If we have stored user data, keep the session active
+        if (!storedUser) {
+          apiService.removeToken();
+          setUser(null);
+          setIsAuthenticated(false);
+        }
       }
     }
   };
@@ -85,8 +103,9 @@ function App() {
       const response = await apiService.login(loginForm.email, loginForm.password);
       
       if (response.access_token) {
-        apiService.setToken(response.access_token);
-        setUser(response.user || { email: loginForm.email, name: 'User' });
+        const userData = response.user || { email: loginForm.email, name: loginForm.email.split('@')[0] };
+        apiService.setToken(response.access_token, userData);
+        setUser(userData);
         setIsAuthenticated(true);
         setCurrentView('dashboard');
       } else {
@@ -244,6 +263,15 @@ function App() {
                 <div className="card-arrow">→</div>
               </div>
 
+              <div className="dashboard-card clickable" onClick={() => handleNavigate('gap-assessment')}>
+                <div className="card-icon">🎯</div>
+                <div className="card-content">
+                  <h3>Gap Assessment</h3>
+                  <p>Evaluate your current compliance status</p>
+                </div>
+                <div className="card-arrow">→</div>
+              </div>
+
               <div className="dashboard-card">
                 <div className="card-icon">📊</div>
                 <div className="card-content">
@@ -280,6 +308,13 @@ function App() {
       )}
       {currentView === 'iso-compliance' && (
         <ISO42001Compliance 
+          user={user} 
+          onNavigate={handleNavigate}
+          onLogout={handleLogout}
+        />
+      )}
+      {currentView === 'gap-assessment' && (
+        <GapAssessmentProfessional 
           user={user} 
           onNavigate={handleNavigate}
           onLogout={handleLogout}

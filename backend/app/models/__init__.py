@@ -16,6 +16,7 @@ from .audit_log import AuditLog
 from .ai_model import AIModel
 from .requirement import Requirement, RequirementAssessment, GapAnalysis
 from .project import Project
+from .iso_control import ISOControl, ControlQuestion, QuestionResponse, EvidenceFile, AssessmentResponse
 
 __all__ = [
     "Base",
@@ -33,6 +34,11 @@ __all__ = [
     "Requirement",
     "RequirementAssessment", 
     "GapAnalysis",
-    "Project"
+    "Project",
+    "ISOControl",
+    "ControlQuestion", 
+    "QuestionResponse",
+    "EvidenceFile",
+    "AssessmentResponse"
 ]
 

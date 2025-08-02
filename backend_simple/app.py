@@ -12,6 +12,9 @@ import logging
 import time
 from datetime import datetime
 
+# Import email service
+from email_service_enhanced import email_service
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,6 +31,12 @@ app.config['DEBUG'] = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 
 # Demo users for authentication
 DEMO_USERS = {
+    "hello@qryti.com": {
+        "password": "Mandar@123",
+        "role": "admin",
+        "full_name": "Qryti Admin",
+        "organization": "Qryti"
+    },
     "admin@demo.qryti.com": {
         "password": "admin123",
         "role": "admin",
@@ -181,6 +190,91 @@ def app_info():
         }
     })
 
+@app.route('/api/v1/auth/send-otp', methods=['POST'])
+def send_otp():
+    """Send OTP to email for verification"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"detail": "Request body required"}), 400
+            
+        email = data.get('email')
+        
+        if not email:
+            return jsonify({"detail": "Email required"}), 400
+            
+        # Generate and send OTP
+        otp = email_service.generate_otp(email)
+        success = email_service.send_otp_email(email, otp)
+        
+        if success:
+            return jsonify({
+                "message": "OTP sent successfully",
+                "email": email,
+                "demo_mode": email_service.demo_mode,
+                "demo_otp": otp if email_service.demo_mode else None
+            })
+        else:
+            return jsonify({"detail": "Failed to send OTP"}), 500
+            
+    except Exception as e:
+        logger.error(f"Send OTP error: {e}")
+        return jsonify({"detail": "Failed to send OTP. Please try again."}), 500
+
+@app.route('/api/v1/auth/verify-otp', methods=['POST'])
+def verify_otp():
+    """Verify OTP and complete authentication"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"detail": "Request body required"}), 400
+            
+        email = data.get('email')
+        otp = data.get('otp')
+        
+        if not email or not otp:
+            return jsonify({"detail": "Email and OTP required"}), 400
+            
+        # Verify OTP
+        is_valid = email_service.verify_otp(email, otp)
+        
+        if is_valid:
+            # Check if user exists in demo users
+            if email in DEMO_USERS:
+                user = DEMO_USERS[email]
+                return jsonify({
+                    "access_token": f"demo-token-{email.split('@')[0]}",
+                    "token_type": "bearer",
+                    "user": {
+                        "email": email,
+                        "full_name": user['full_name'],
+                        "role": user['role'],
+                        "organization": user['organization']
+                    },
+                    "message": "OTP verified successfully"
+                })
+            else:
+                # For non-demo users, create a basic user profile
+                return jsonify({
+                    "access_token": f"verified-token-{email.split('@')[0]}",
+                    "token_type": "bearer",
+                    "user": {
+                        "email": email,
+                        "full_name": email.split('@')[0].title(),
+                        "role": "user",
+                        "organization": "Verified User"
+                    },
+                    "message": "OTP verified successfully"
+                })
+        else:
+            return jsonify({"detail": "Invalid or expired OTP"}), 400
+            
+    except Exception as e:
+        logger.error(f"Verify OTP error: {e}")
+        return jsonify({"detail": "OTP verification failed. Please try again."}), 500
+
 @app.route('/api/docs')
 def api_docs():
     """API documentation endpoint"""
@@ -193,12 +287,20 @@ def api_docs():
             "GET /health": "Health check endpoint",
             "POST /api/v1/auth/login": "User authentication",
             "POST /api/v1/auth/register": "User registration",
+            "POST /api/v1/auth/send-otp": "Send OTP for email verification",
+            "POST /api/v1/auth/verify-otp": "Verify OTP and complete authentication",
             "GET /api/v1/users/": "List users (authenticated)",
             "GET /api/v1/info": "Application information"
         },
         "demo_users": {
+            "hello@qryti.com": "Mandar@123",
             "admin@demo.qryti.com": "admin123",
             "user@demo.qryti.com": "demo123"
+        },
+        "otp_flow": {
+            "1": "POST /api/v1/auth/send-otp with email",
+            "2": "Check email for OTP code (or console in demo mode)",
+            "3": "POST /api/v1/auth/verify-otp with email and OTP"
         }
     })
 

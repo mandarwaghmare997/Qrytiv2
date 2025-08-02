@@ -7,16 +7,47 @@ class ApiService {
   constructor() {
     this.baseURL = config.API_BASE_URL;
     this.token = localStorage.getItem('auth_token');
+    this.user = null;
+    
+    // Restore user data from localStorage if available
+    const storedUser = localStorage.getItem('user_data');
+    if (storedUser) {
+      try {
+        this.user = JSON.parse(storedUser);
+      } catch (error) {
+        console.error('Error parsing stored user data:', error);
+        localStorage.removeItem('user_data');
+      }
+    }
   }
 
-  // Set authentication token
-  setToken(token) {
+  // Set authentication token and user data
+  setToken(token, userData = null) {
     this.token = token;
     if (token) {
       localStorage.setItem('auth_token', token);
+      if (userData) {
+        this.user = userData;
+        localStorage.setItem('user_data', JSON.stringify(userData));
+      }
     } else {
       localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_data');
+      this.user = null;
     }
+  }
+
+  // Remove token and clear session
+  removeToken() {
+    this.token = null;
+    this.user = null;
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user_data');
+  }
+
+  // Get stored user data
+  getUser() {
+    return this.user;
   }
 
   // Get authentication headers
@@ -70,7 +101,9 @@ class ApiService {
     });
 
     if (response.access_token) {
-      this.setToken(response.access_token);
+      // Store both token and user data
+      const userData = response.user || { email, name: email.split('@')[0] };
+      this.setToken(response.access_token, userData);
     }
 
     return response;
@@ -102,7 +135,7 @@ class ApiService {
 
   // Logout
   logout() {
-    this.setToken(null);
+    this.removeToken();
   }
 
   // Check if user is authenticated
