@@ -1,7 +1,7 @@
 // API service for Qrytiv2 frontend
 // Handles all API communication with the backend
 
-import config from '../config.js';
+import config from '../config';
 
 class ApiService {
   constructor() {

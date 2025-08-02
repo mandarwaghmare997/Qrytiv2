@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import api from './services/api';
+import config from './config';
+import AdminDashboard from './components/AdminDashboard';
 import AdminDashboardNew from './components/AdminDashboardNew';
+import AIModelRegistry from './components/AIModelRegistry';
 import GapAssessmentProfessional from './components/GapAssessmentProfessional';
 import ComplianceReports from './components/ComplianceReports';
 import Certifications from './components/Certifications';

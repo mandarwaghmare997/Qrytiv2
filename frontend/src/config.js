@@ -3,7 +3,7 @@
 
 const config = {
   // API Base URL - Production backend
-  API_BASE_URL: 'https://5000-i5z6of5yi0dluajrew3e8-70f7ccea.manusvm.computer',
+  API_BASE_URL: 'https://5000-izdpeagn1j4mfrnvhdjpn-70f7ccea.manusvm.computer',
   
   // Environment
   ENVIRONMENT: 'production',
