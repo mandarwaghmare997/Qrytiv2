@@ -3,7 +3,7 @@
 
 const config = {
   // API Base URL - Production backend
-  API_BASE_URL: 'https://5000-iimkiu1zbs597gtiloq24-70f7ccea.manusvm.computer',
+  API_BASE_URL: 'https://5000-i5z6of5yi0dluajrew3e8-70f7ccea.manusvm.computer',
   
   // Environment
   ENVIRONMENT: 'production',
@@ -15,13 +15,21 @@ const config = {
     REGISTER: '/api/v1/auth/register',
     USERS: '/api/v1/users/',
     INFO: '/api/v1/info',
-    DOCS: '/api/docs'
+    DOCS: '/api/docs',
+    SEND_OTP: '/api/v1/auth/send-otp',
+    VERIFY_OTP: '/api/v1/auth/verify-otp'
   },
   
   // Admin credentials
   ADMIN_CREDENTIALS: {
     email: 'hello@qryti.com',
     password: 'Mandar@123'
+  },
+  
+  // Demo credentials
+  DEMO_CREDENTIALS: {
+    email: 'user@demo.qryti.com',
+    password: 'demo123'
   },
   
   // App settings
@@ -32,7 +40,8 @@ const config = {
   FEATURES: {
     AUTHENTICATION: true,
     DEMO_MODE: true,
-    OFFLINE_MODE: false
+    OFFLINE_MODE: false,
+    OTP_VERIFICATION: true
   }
 };
 
