@@ -5,6 +5,7 @@ import config from './config.js';
 import AIModelRegistry from './components/AIModelRegistry.jsx';
 import AdminDashboard from './components/AdminDashboard.jsx';
 import ISO42001Compliance from './components/ISO42001Compliance.jsx';
+import qrytiLogo from './assets/qryti-logo.png';
 import './components/AIModelRegistry.css';
 
 function App() {
@@ -52,23 +53,26 @@ function App() {
           const userData = await response.json();
           setUser(userData);
           setIsAuthenticated(true);
-          
-          // Set default view based on user role
-          if (userData.role === 'admin') {
-            setCurrentView('admin');
-          } else {
-            setCurrentView('dashboard');
-          }
         } else {
-          // Token is invalid
+          // Token is invalid, remove it
           apiService.removeToken();
-          setIsAuthenticated(false);
         }
       } catch (error) {
         console.error('Auth check failed:', error);
         apiService.removeToken();
-        setIsAuthenticated(false);
       }
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setLoginForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    // Clear error when user starts typing
+    if (error) {
+      setError('');
     }
   };
 
@@ -79,206 +83,208 @@ function App() {
 
     try {
       const response = await apiService.login(loginForm.email, loginForm.password);
-      setUser(response.user);
-      setIsAuthenticated(true);
-      setLoginForm({ email: '', password: '' });
+      
+      if (response.access_token) {
+        apiService.setToken(response.access_token);
+        setUser(response.user || { email: loginForm.email, name: 'User' });
+        setIsAuthenticated(true);
+        setCurrentView('dashboard');
+      } else {
+        setError('Login failed. Please check your credentials.');
+      }
     } catch (error) {
-      setError(error.message || 'Login failed. Please try again.');
+      console.error('Login error:', error);
+      if (error.message.includes('Network')) {
+        setError('Network error. Please check your connection and try again.');
+      } else {
+        setError('Login failed. Please check your credentials.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleLogout = () => {
-    apiService.logout();
-    setIsAuthenticated(false);
+    apiService.removeToken();
     setUser(null);
+    setIsAuthenticated(false);
+    setCurrentView('dashboard');
+    setLoginForm({ email: '', password: '' });
   };
 
-  // Login form component
-  const LoginForm = () => (
-    <div className="login-container">
-      <div className="login-card">
-        <h2>Login to Qrytiv2</h2>
-        <p className="login-subtitle">ISO 42001 AI Governance Platform</p>
-        
-        {error && (
-          <div className="error-message">
-            {error}
+  const handleNavigate = (view) => {
+    setCurrentView(view);
+  };
+
+  // Show login form if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="login-container">
+        <div className="login-background">
+          <div className="login-card">
+            <div className="login-header">
+              <img src={qrytiLogo} alt="Qryti" className="login-logo" />
+              <h1>Welcome to Qryti</h1>
+              <p>ISO 42001 AI Governance Platform</p>
+            </div>
+
+            <form onSubmit={handleLogin} className="login-form">
+              {error && (
+                <div className="error-message">
+                  {error}
+                </div>
+              )}
+
+              <div className="form-group">
+                <label htmlFor="email">Email</label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={loginForm.email}
+                  onChange={handleInputChange}
+                  placeholder="Enter your email"
+                  required
+                  disabled={loading}
+                  autoComplete="email"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="password">Password</label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  value={loginForm.password}
+                  onChange={handleInputChange}
+                  placeholder="Enter your password"
+                  required
+                  disabled={loading}
+                  autoComplete="current-password"
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                className="login-button"
+                disabled={loading}
+              >
+                {loading ? 'Signing in...' : 'Sign In'}
+              </button>
+
+              <div className="login-footer">
+                <a href="#" className="forgot-password">Forgot Password?</a>
+              </div>
+            </form>
+
+            <div className="api-status">
+              API Status: {apiStatus === 'healthy' ? '✅ Connected' : apiStatus === 'error' ? '❌ Disconnected' : '🔄 Checking...'}
+            </div>
           </div>
-        )}
-
-        <form onSubmit={handleLogin} className="login-form">
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              type="email"
-              id="email"
-              value={loginForm.email}
-              onChange={(e) => setLoginForm({...loginForm, email: e.target.value})}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              type="password"
-              id="password"
-              value={loginForm.password}
-              onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <button type="submit" className="login-button" disabled={loading}>
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-
-        <div className="forgot-password">
-          <a href="#" className="forgot-link">Forgot Password?</a>
-        </div>
-
-        <div className="api-status">
-          <span className={`status-indicator ${apiStatus}`}></span>
-          API Status: {apiStatus === 'healthy' ? 'Connected' : apiStatus === 'error' ? 'Disconnected' : 'Checking...'}
         </div>
       </div>
-    </div>
-  );
+    );
+  }
 
-  // Dashboard component
-  const Dashboard = () => (
-    <div className="dashboard">
-      <header className="dashboard-header">
-        <div className="header-content">
-          <h1>Qrytiv2 Dashboard</h1>
-          <div className="user-info">
-            <span>Welcome, {user?.name || 'User'}</span>
-            <span className="user-role">({user?.role || 'client'})</span>
-            <button onClick={handleLogout} className="logout-button">
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+  // Determine if user is admin
+  const isAdmin = user?.role === 'admin' || user?.email?.includes('admin');
 
-      <main className="dashboard-main">
-        <div className="dashboard-grid">
-          <div className="dashboard-card clickable" onClick={() => setCurrentView('iso-compliance')}>
-            <h3>ISO 42001 Compliance</h3>
-            <p>Start or continue your AI governance compliance journey</p>
-            <div className="compliance-score">
-              <span className="score">0%</span>
-              <span className="score-label">Compliance Score</span>
-            </div>
-            <div className="card-action">
-              <span>Start Journey →</span>
-            </div>
-          </div>
+  // Show admin dashboard for admin users
+  if (isAdmin && currentView === 'dashboard') {
+    return (
+      <AdminDashboard 
+        user={user} 
+        onNavigate={handleNavigate}
+        onLogout={handleLogout}
+      />
+    );
+  }
 
-          <div className="dashboard-card clickable" onClick={() => setCurrentView('ai-models')}>
-            <h3>AI Model Registry</h3>
-            <p>Manage your AI models and their lifecycle</p>
-            <div className="stat">
-              <span className="stat-number">0</span>
-              <span className="stat-label">Active Models</span>
+  // Regular dashboard for client users
+  if (currentView === 'dashboard') {
+    return (
+      <div className="app">
+        <header className="app-header">
+          <div className="header-content">
+            <div className="header-left">
+              <img src={qrytiLogo} alt="Qryti" className="header-logo" />
+              <h1>Qryti Platform</h1>
             </div>
-            <div className="card-action">
-              <span>Click to manage →</span>
+            <div className="header-right">
+              <span>Welcome, {user?.name || user?.email}</span>
+              <button onClick={handleLogout} className="logout-btn">Logout</button>
             </div>
           </div>
+        </header>
 
-          <div className="dashboard-card">
-            <h3>Risk Assessment</h3>
-            <p>Identify and mitigate AI-related risks</p>
-            <div className="stat">
-              <span className="stat-number">0</span>
-              <span className="stat-label">High Priority Items</span>
+        <main className="app-main">
+          <div className="dashboard-container">
+            <div className="dashboard-header">
+              <h2>ISO 42001 AI Governance Dashboard</h2>
+              <p>Manage your AI compliance journey</p>
+            </div>
+
+            <div className="dashboard-grid">
+              <div className="dashboard-card clickable" onClick={() => handleNavigate('ai-models')}>
+                <div className="card-icon">🤖</div>
+                <div className="card-content">
+                  <h3>AI Model Registry</h3>
+                  <p>Register and manage your AI models</p>
+                </div>
+                <div className="card-arrow">→</div>
+              </div>
+
+              <div className="dashboard-card clickable" onClick={() => handleNavigate('iso-compliance')}>
+                <div className="card-icon">📋</div>
+                <div className="card-content">
+                  <h3>ISO 42001 Compliance</h3>
+                  <p>Start your ISO 42001 journey for {user?.organization || 'your organization'}</p>
+                </div>
+                <div className="card-arrow">→</div>
+              </div>
+
+              <div className="dashboard-card">
+                <div className="card-icon">📊</div>
+                <div className="card-content">
+                  <h3>Compliance Reports</h3>
+                  <p>View your compliance progress and reports</p>
+                </div>
+                <div className="card-status">Coming Soon</div>
+              </div>
+
+              <div className="dashboard-card">
+                <div className="card-icon">🏆</div>
+                <div className="card-content">
+                  <h3>Certifications</h3>
+                  <p>Track your certification status</p>
+                </div>
+                <div className="card-status">Coming Soon</div>
+              </div>
             </div>
           </div>
+        </main>
+      </div>
+    );
+  }
 
-          <div className="dashboard-card">
-            <h3>Audit Trail</h3>
-            <p>Track all compliance activities and changes</p>
-            <div className="stat">
-              <span className="stat-number">0</span>
-              <span className="stat-label">Recent Activities</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="user-details">
-          <h3>User Information</h3>
-          <div className="user-details-grid">
-            <div><strong>Email:</strong> {user?.email}</div>
-            <div><strong>Role:</strong> {user?.role}</div>
-            <div><strong>Organization:</strong> {user?.organization}</div>
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-
-  const handleNavigation = (view, data) => {
-    setCurrentView(view);
-    // Handle any additional data if needed
-  };
-
-  const renderCurrentView = () => {
-    if (!isAuthenticated) {
-      return <LoginForm />;
-    }
-
-    // Admin users see admin dashboard by default
-    if (user?.role === 'admin') {
-      switch (currentView) {
-        case 'ai-models':
-          return (
-            <AIModelRegistry 
-              user={user} 
-              onBack={() => setCurrentView('admin')} 
-            />
-          );
-        case 'admin':
-        default:
-          return (
-            <AdminDashboard 
-              user={user} 
-              onNavigate={handleNavigation}
-            />
-          );
-      }
-    }
-
-    // Client users see client dashboard and modules
-    switch (currentView) {
-      case 'ai-models':
-        return (
-          <AIModelRegistry 
-            user={user} 
-            onBack={() => setCurrentView('dashboard')} 
-          />
-        );
-      case 'iso-compliance':
-        return (
-          <ISO42001Compliance 
-            user={user} 
-            onNavigate={handleNavigation}
-          />
-        );
-      case 'dashboard':
-      default:
-        return <Dashboard />;
-    }
-  };
-
+  // Other views
   return (
-    <div className="App">
-      {renderCurrentView()}
+    <div className="app">
+      {currentView === 'ai-models' && (
+        <AIModelRegistry 
+          user={user} 
+          onNavigate={handleNavigate}
+          onLogout={handleLogout}
+        />
+      )}
+      {currentView === 'iso-compliance' && (
+        <ISO42001Compliance 
+          user={user} 
+          onNavigate={handleNavigate}
+          onLogout={handleLogout}
+        />
+      )}
     </div>
   );
 }

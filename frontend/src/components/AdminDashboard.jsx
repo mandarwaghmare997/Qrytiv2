@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import './AdminDashboard.css';
 import CreateClientForm from './CreateClientForm.jsx';
 import CreateProjectForm from './CreateProjectForm.jsx';
+import qrytiLogo from '../assets/qryti-logo.png';
 
-const AdminDashboard = ({ user, onNavigate }) => {
+const AdminDashboard = ({ user, onNavigate, onLogout }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [showCreateClient, setShowCreateClient] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
@@ -369,10 +370,13 @@ const AdminDashboard = ({ user, onNavigate }) => {
     <div className="admin-dashboard">
       <header className="admin-header">
         <div className="header-content">
-          <h1>Admin Dashboard</h1>
+          <div className="header-left">
+            <img src={qrytiLogo} alt="Qryti" className="admin-logo" />
+            <h1>Admin Dashboard</h1>
+          </div>
           <div className="admin-info">
             <span>Welcome, {user?.name || 'Admin'}</span>
-            <button className="logout-btn">Logout</button>
+            <button className="logout-btn" onClick={onLogout}>Logout</button>
           </div>
         </div>
       </header>

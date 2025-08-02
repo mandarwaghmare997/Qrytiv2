@@ -538,3 +538,61 @@
   }
 }
 
+
+/* Admin Logo Styles */
+.admin-header .header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-logo {
+  height: 32px;
+  width: auto;
+}
+
+.admin-header .header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 64px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Enhanced admin header styling */
+.admin-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-bottom: none;
+  padding: 0 24px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.admin-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: white;
+}
+
+.admin-info span {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.875rem;
+}
+
+.admin-header .logout-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.admin-header .logout-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
