@@ -33,7 +33,7 @@ function App() {
 
   const checkApiHealth = async () => {
     try {
-      await apiService.healthCheck();
+      await api.healthCheck();
       setApiStatus('healthy');
     } catch (error) {
       setApiStatus('error');
@@ -42,8 +42,8 @@ function App() {
   };
 
   const checkAuthStatus = async () => {
-    const token = apiService.getToken();
-    const storedUser = apiService.getUser();
+    const token = api.getToken();
+    const storedUser = api.getUser();
     
     if (token) {
       // If we have stored user data, use it immediately
@@ -65,10 +65,10 @@ function App() {
           setUser(userData);
           setIsAuthenticated(true);
           // Update stored user data
-          apiService.setToken(token, userData);
+          api.setToken(token, userData);
         } else {
           // Token is invalid, remove it
-          apiService.removeToken();
+          api.removeToken();
           setUser(null);
           setIsAuthenticated(false);
         }
@@ -76,7 +76,7 @@ function App() {
         console.error('Auth check failed:', error);
         // If we have stored user data, keep the session active
         if (!storedUser) {
-          apiService.removeToken();
+          api.removeToken();
           setUser(null);
           setIsAuthenticated(false);
         }
@@ -102,11 +102,11 @@ function App() {
     setError('');
 
     try {
-      const response = await apiService.login(loginForm.email, loginForm.password);
+      const response = await api.login(loginForm.email, loginForm.password);
       
       if (response.access_token) {
         const userData = response.user || { email: loginForm.email, name: loginForm.email.split('@')[0] };
-        apiService.setToken(response.access_token, userData);
+        api.setToken(response.access_token, userData);
         setUser(userData);
         setIsAuthenticated(true);
         setCurrentView('dashboard');
@@ -126,7 +126,7 @@ function App() {
   };
 
   const handleLogout = () => {
-    apiService.removeToken();
+    api.removeToken();
     setUser(null);
     setIsAuthenticated(false);
     setCurrentView('dashboard');
