@@ -1,304 +1,415 @@
 """
-Authentication Endpoints
-Handles user registration, login, and token management
+Authentication API endpoints
+Handles user registration, login, token management, and profile operations
 
 Developed by: Qryti Dev Team
 """
 
-from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from typing import Any
+import logging
 
 from app.core.database import get_db
 from app.core.security import (
-    verify_password, 
-    get_password_hash, 
-    create_access_token, 
-    create_refresh_token,
-    verify_token,
-    extract_domain_from_email
+    security_utils, get_current_user, get_current_active_user,
+    create_tokens_for_user, security_middleware
 )
-from app.core.config import settings
-from app.core.deps import get_current_user
-from app.models.user import User
-from app.models.organization import Organization
-from app.models.audit_log import AuditLog, AuditActions, AuditEntityTypes
 from app.schemas.auth import (
-    UserRegister, 
-    UserLogin, 
-    Token, 
-    TokenRefresh, 
-    PasswordChange,
-    UserProfile
+    UserRegistration, UserLogin, TokenResponse, RefreshTokenRequest,
+    PasswordReset, PasswordResetConfirm, PasswordChange, EmailVerification,
+    AuthResponse, RegistrationResponse, MessageResponse, UserWithOrganization,
+    InviteUserRequest, UpdateProfileRequest
 )
+from app.models.user import User, UserRole
+from app.models.organization import Organization
+from app.services.email_service import send_verification_email, send_password_reset_email
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+security = HTTPBearer()
 
-@router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
-async def register(
-    user_data: UserRegister,
-    request: Request,
+@router.post("/register", response_model=RegistrationResponse)
+async def register_user(
+    user_data: UserRegistration,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
-):
+) -> Any:
     """
     Register a new user and organization
-    Creates organization if it doesn't exist, or adds user to existing organization
     """
-    # Check if user already exists
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
-    
-    # Extract domain from email
-    domain = extract_domain_from_email(user_data.email)
-    
-    # Check if organization exists for this domain
-    organization = db.query(Organization).filter(Organization.domain == domain).first()
-    
-    if not organization:
-        # Create new organization
+    try:
+        # Check if user already exists
+        existing_user = db.query(User).filter(User.email == user_data.email).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User with this email already exists"
+            )
+        
+        # Check if organization domain already exists
+        if user_data.organization_domain:
+            existing_org = db.query(Organization).filter(
+                Organization.domain == user_data.organization_domain
+            ).first()
+            if existing_org:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Organization with this domain already exists"
+                )
+        
+        # Create organization
         organization = Organization(
             name=user_data.organization_name,
-            domain=domain,
-            industry=user_data.industry,
-            size_category=user_data.size_category,
-            geographic_scope=user_data.geographic_scope
+            domain=user_data.organization_domain,
+            description=f"Organization for {user_data.organization_name}",
+            is_active=True
         )
         db.add(organization)
         db.flush()  # Get the organization ID
         
-        # First user in organization becomes admin
-        user_role = "admin"
-        
-        # Log organization creation
-        audit_log = AuditLog.create_log(
+        # Create user
+        hashed_password = security_utils.get_password_hash(user_data.password)
+        user = User(
+            email=user_data.email,
+            full_name=user_data.full_name,
+            hashed_password=hashed_password,
+            role=UserRole.ADMIN,  # First user in organization is admin
             organization_id=organization.id,
-            action=AuditActions.ORGANIZATION_CREATED,
-            entity_type=AuditEntityTypes.ORGANIZATION,
-            entity_id=organization.id,
-            ip_address=request.client.host,
-            user_agent=request.headers.get("user-agent"),
-            description=f"Organization '{organization.name}' created during user registration"
+            is_active=True,
+            is_verified=False  # Require email verification
         )
-        db.add(audit_log)
-    else:
-        # Add user to existing organization
-        user_role = "user"
-    
-    # Create new user
-    hashed_password = get_password_hash(user_data.password)
-    user = User(
-        email=user_data.email,
-        password_hash=hashed_password,
-        first_name=user_data.first_name,
-        last_name=user_data.last_name,
-        position=user_data.position,
-        role=user_role,
-        organization_id=organization.id,
-        is_email_verified=True  # Auto-verify for business emails
-    )
-    
-    db.add(user)
-    db.flush()  # Get the user ID
-    
-    # Log user creation
-    audit_log = AuditLog.create_log(
-        organization_id=organization.id,
-        user_id=user.id,
-        action=AuditActions.USER_CREATED,
-        entity_type=AuditEntityTypes.USER,
-        entity_id=user.id,
-        ip_address=request.client.host,
-        user_agent=request.headers.get("user-agent"),
-        description=f"User '{user.full_name}' registered with role '{user_role}'"
-    )
-    db.add(audit_log)
-    
-    db.commit()
-    
-    # Create tokens
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
-    
-    return Token(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
-    )
-
-@router.post("/login", response_model=Token)
-async def login(
-    user_credentials: UserLogin,
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    """
-    Authenticate user and return JWT tokens
-    """
-    # Find user by email
-    user = db.query(User).filter(User.email == user_credentials.email).first()
-    
-    if not user or not verify_password(user_credentials.password, user.password_hash):
-        # Log failed login attempt
-        if user:
-            audit_log = AuditLog.create_log(
-                organization_id=user.organization_id,
-                user_id=user.id,
-                action=AuditActions.LOGIN_FAILED,
-                entity_type=AuditEntityTypes.USER,
-                entity_id=user.id,
-                ip_address=request.client.host,
-                user_agent=request.headers.get("user-agent"),
-                description="Failed login attempt - incorrect password",
-                severity="warning"
-            )
-            db.add(audit_log)
-            db.commit()
+        db.add(user)
+        db.commit()
         
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
+        # Send verification email
+        background_tasks.add_task(send_verification_email, user.email, user.full_name)
+        
+        logger.info(f"User registered successfully: {user.email}")
+        
+        return RegistrationResponse(
+            user=user,
+            message="Registration successful. Please check your email for verification."
         )
-    
-    if not user.is_active:
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Registration error: {e}")
+        db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User account is deactivated"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registration failed. Please try again."
         )
-    
-    # Update last login time
-    user.last_login = func.now()
-    
-    # Log successful login
-    audit_log = AuditLog.create_log(
-        organization_id=user.organization_id,
-        user_id=user.id,
-        action=AuditActions.LOGIN,
-        entity_type=AuditEntityTypes.USER,
-        entity_id=user.id,
-        ip_address=request.client.host,
-        user_agent=request.headers.get("user-agent"),
-        description="Successful login"
-    )
-    db.add(audit_log)
-    db.commit()
-    
-    # Create tokens
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
-    
-    return Token(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
-    )
 
-@router.post("/refresh", response_model=Token)
-async def refresh_token(
-    token_data: TokenRefresh,
+@router.post("/login", response_model=AuthResponse)
+async def login_user(
+    user_credentials: UserLogin,
     db: Session = Depends(get_db)
-):
+) -> Any:
+    """
+    Authenticate user and return tokens
+    """
+    try:
+        # Authenticate user
+        user = security_utils.authenticate_user(
+            db, user_credentials.email, user_credentials.password
+        )
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+        
+        if not user.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Email verification required. Please check your email."
+            )
+        
+        # Update last login
+        from datetime import datetime
+        user.last_login = datetime.utcnow()
+        db.commit()
+        
+        # Create tokens
+        tokens = create_tokens_for_user(user)
+        
+        # Get user with organization
+        user_with_org = db.query(User).filter(User.id == user.id).first()
+        
+        logger.info(f"User logged in successfully: {user.email}")
+        
+        return AuthResponse(
+            user=user_with_org,
+            tokens=tokens,
+            message="Login successful"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Login failed. Please try again."
+        )
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(
+    refresh_data: RefreshTokenRequest,
+    db: Session = Depends(get_db)
+) -> Any:
     """
     Refresh access token using refresh token
     """
-    payload = verify_token(token_data.refresh_token)
-    
-    if payload.get("type") != "refresh":
+    try:
+        # Verify refresh token
+        payload = security_utils.verify_token(refresh_data.refresh_token, "refresh")
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token"
+            )
+        
+        # Get user
+        user_id = payload.get("sub")
+        user = db.query(User).filter(User.id == int(user_id)).first()
+        
+        if not user or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found or inactive"
+            )
+        
+        # Create new tokens
+        tokens = create_tokens_for_user(user)
+        
+        logger.info(f"Token refreshed for user: {user.email}")
+        
+        return tokens
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Token refresh error: {e}")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token refresh failed"
         )
-    
-    user_id = payload.get("sub")
-    user = db.query(User).filter(User.id == user_id).first()
-    
-    if not user or not user.is_active:
+
+@router.post("/verify-email", response_model=MessageResponse)
+async def verify_email(
+    verification_data: EmailVerification,
+    db: Session = Depends(get_db)
+) -> Any:
+    """
+    Verify user email address
+    """
+    try:
+        # Verify token (implement token verification logic)
+        # For now, we'll use a simple approach
+        payload = security_utils.verify_token(verification_data.token, "verification")
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired verification token"
+            )
+        
+        # Get user
+        user_id = payload.get("sub")
+        user = db.query(User).filter(User.id == int(user_id)).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Verify user
+        user.is_verified = True
+        db.commit()
+        
+        logger.info(f"Email verified for user: {user.email}")
+        
+        return MessageResponse(message="Email verified successfully")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Email verification error: {e}")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or deactivated"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Email verification failed"
         )
-    
-    # Create new tokens
-    access_token = create_access_token(data={"sub": str(user.id)})
-    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
-    
-    return Token(
-        access_token=access_token,
-        refresh_token=new_refresh_token,
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
-    )
 
-@router.get("/me", response_model=UserProfile)
-async def get_current_user_profile(
-    current_user: User = Depends(get_current_user)
-):
+@router.post("/forgot-password", response_model=MessageResponse)
+async def forgot_password(
+    reset_data: PasswordReset,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+) -> Any:
     """
-    Get current user profile information
+    Send password reset email
     """
-    return UserProfile(**current_user.to_dict())
+    try:
+        # Check if user exists
+        user = db.query(User).filter(User.email == reset_data.email).first()
+        
+        # Always return success to prevent email enumeration
+        if user and user.is_active:
+            # Send password reset email
+            background_tasks.add_task(send_password_reset_email, user.email, user.full_name)
+            logger.info(f"Password reset email sent to: {user.email}")
+        
+        return MessageResponse(
+            message="If the email exists, a password reset link has been sent"
+        )
+        
+    except Exception as e:
+        logger.error(f"Password reset error: {e}")
+        return MessageResponse(
+            message="If the email exists, a password reset link has been sent"
+        )
 
-@router.post("/change-password")
+@router.post("/reset-password", response_model=MessageResponse)
+async def reset_password(
+    reset_data: PasswordResetConfirm,
+    db: Session = Depends(get_db)
+) -> Any:
+    """
+    Reset password using reset token
+    """
+    try:
+        # Verify reset token
+        payload = security_utils.verify_token(reset_data.token, "reset")
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset token"
+            )
+        
+        # Get user
+        user_id = payload.get("sub")
+        user = db.query(User).filter(User.id == int(user_id)).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Update password
+        user.hashed_password = security_utils.get_password_hash(reset_data.new_password)
+        db.commit()
+        
+        logger.info(f"Password reset for user: {user.email}")
+        
+        return MessageResponse(message="Password reset successfully")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Password reset error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Password reset failed"
+        )
+
+@router.post("/change-password", response_model=MessageResponse)
 async def change_password(
     password_data: PasswordChange,
-    request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
-):
+) -> Any:
     """
     Change user password
     """
-    # Verify current password
-    if not verify_password(password_data.current_password, current_user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Current password is incorrect"
+    try:
+        # Verify current password
+        if not security_utils.verify_password(
+            password_data.current_password, current_user.hashed_password
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Current password is incorrect"
+            )
+        
+        # Update password
+        current_user.hashed_password = security_utils.get_password_hash(
+            password_data.new_password
         )
-    
-    # Update password
-    current_user.password_hash = get_password_hash(password_data.new_password)
-    
-    # Log password change
-    audit_log = AuditLog.create_log(
-        organization_id=current_user.organization_id,
-        user_id=current_user.id,
-        action=AuditActions.PASSWORD_CHANGED,
-        entity_type=AuditEntityTypes.USER,
-        entity_id=current_user.id,
-        ip_address=request.client.host,
-        user_agent=request.headers.get("user-agent"),
-        description="Password changed successfully"
-    )
-    db.add(audit_log)
-    db.commit()
-    
-    return {"message": "Password changed successfully"}
+        db.commit()
+        
+        logger.info(f"Password changed for user: {current_user.email}")
+        
+        return MessageResponse(message="Password changed successfully")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Password change error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Password change failed"
+        )
 
-@router.post("/logout")
-async def logout(
-    request: Request,
-    current_user: User = Depends(get_current_user),
+@router.get("/profile", response_model=UserWithOrganization)
+async def get_profile(
+    current_user: User = Depends(get_current_active_user)
+) -> Any:
+    """
+    Get current user profile
+    """
+    return current_user
+
+@router.put("/profile", response_model=UserWithOrganization)
+async def update_profile(
+    profile_data: UpdateProfileRequest,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
-):
+) -> Any:
     """
-    Logout user (mainly for audit logging)
+    Update current user profile
     """
-    # Log logout
-    audit_log = AuditLog.create_log(
-        organization_id=current_user.organization_id,
-        user_id=current_user.id,
-        action=AuditActions.LOGOUT,
-        entity_type=AuditEntityTypes.USER,
-        entity_id=current_user.id,
-        ip_address=request.client.host,
-        user_agent=request.headers.get("user-agent"),
-        description="User logged out"
-    )
-    db.add(audit_log)
-    db.commit()
+    try:
+        # Update profile fields
+        if profile_data.full_name is not None:
+            current_user.full_name = profile_data.full_name
+        
+        db.commit()
+        
+        logger.info(f"Profile updated for user: {current_user.email}")
+        
+        return current_user
+        
+    except Exception as e:
+        logger.error(f"Profile update error: {e}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Profile update failed"
+        )
+
+@router.post("/logout", response_model=MessageResponse)
+async def logout_user(
+    current_user: User = Depends(get_current_active_user)
+) -> Any:
+    """
+    Logout user (client should discard tokens)
+    """
+    logger.info(f"User logged out: {current_user.email}")
     
-    return {"message": "Logged out successfully"}
+    return MessageResponse(message="Logout successful")
+
+@router.get("/me", response_model=UserWithOrganization)
+async def get_current_user_info(
+    current_user: User = Depends(get_current_active_user)
+) -> Any:
+    """
+    Get current authenticated user information
+    """
+    return current_user
 

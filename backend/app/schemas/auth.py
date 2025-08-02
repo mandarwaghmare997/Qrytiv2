@@ -1,118 +1,205 @@
 """
-Authentication Schemas
-Pydantic models for authentication requests and responses
+Authentication schemas for request/response validation
+Handles user registration, login, and token management
 
 Developed by: Qryti Dev Team
 """
 
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, validator, Field
 from typing import Optional
-from app.core.security import validate_business_email, validate_password_strength
+from datetime import datetime
+from app.models.user import UserRole
 
-class UserRegister(BaseModel):
-    """Schema for user registration"""
-    email: EmailStr
-    password: str
-    first_name: str
-    last_name: str
-    organization_name: str
-    position: Optional[str] = None
-    industry: Optional[str] = None
-    size_category: Optional[str] = None
-    geographic_scope: Optional[str] = None
-    
-    @validator('email')
-    def validate_email_domain(cls, v):
-        if not validate_business_email(v):
-            raise ValueError('Personal email addresses are not allowed. Please use your business email.')
-        return v.lower()
+class UserRegistration(BaseModel):
+    """User registration request schema"""
+    email: EmailStr = Field(..., description="User email address")
+    password: str = Field(..., min_length=8, description="User password")
+    full_name: str = Field(..., min_length=2, max_length=100, description="User full name")
+    organization_name: str = Field(..., min_length=2, max_length=100, description="Organization name")
+    organization_domain: Optional[str] = Field(None, description="Organization domain")
     
     @validator('password')
     def validate_password(cls, v):
-        is_valid, error_msg = validate_password_strength(v)
-        if not is_valid:
-            raise ValueError(error_msg)
+        """Validate password strength"""
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        
+        if not any(c.islower() for c in v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one digit')
+        
         return v
     
-    @validator('first_name', 'last_name')
-    def validate_names(cls, v):
-        if not v or len(v.strip()) < 2:
-            raise ValueError('Name must be at least 2 characters long')
-        return v.strip().title()
-    
-    @validator('organization_name')
-    def validate_organization_name(cls, v):
-        if not v or len(v.strip()) < 2:
-            raise ValueError('Organization name must be at least 2 characters long')
-        return v.strip()
+    @validator('email')
+    def validate_email_domain(cls, v):
+        """Validate email domain"""
+        from app.core.security import security_middleware
+        
+        if not security_middleware.validate_email_domain(v):
+            raise ValueError('Personal email domains are not allowed. Please use a business email.')
+        
+        return v
 
 class UserLogin(BaseModel):
-    """Schema for user login"""
-    email: EmailStr
-    password: str
-    
-    @validator('email')
-    def validate_email_format(cls, v):
-        return v.lower()
+    """User login request schema"""
+    email: EmailStr = Field(..., description="User email address")
+    password: str = Field(..., description="User password")
 
-class Token(BaseModel):
-    """Schema for JWT token response"""
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-    expires_in: int
+class TokenResponse(BaseModel):
+    """Token response schema"""
+    access_token: str = Field(..., description="JWT access token")
+    refresh_token: str = Field(..., description="JWT refresh token")
+    token_type: str = Field(default="bearer", description="Token type")
+    expires_in: int = Field(..., description="Token expiration time in seconds")
 
-class TokenRefresh(BaseModel):
-    """Schema for token refresh request"""
-    refresh_token: str
-
-class PasswordChange(BaseModel):
-    """Schema for password change request"""
-    current_password: str
-    new_password: str
-    
-    @validator('new_password')
-    def validate_new_password(cls, v):
-        is_valid, error_msg = validate_password_strength(v)
-        if not is_valid:
-            raise ValueError(error_msg)
-        return v
+class RefreshTokenRequest(BaseModel):
+    """Refresh token request schema"""
+    refresh_token: str = Field(..., description="JWT refresh token")
 
 class PasswordReset(BaseModel):
-    """Schema for password reset request"""
-    email: EmailStr
-    
-    @validator('email')
-    def validate_email_format(cls, v):
-        return v.lower()
+    """Password reset request schema"""
+    email: EmailStr = Field(..., description="User email address")
 
 class PasswordResetConfirm(BaseModel):
-    """Schema for password reset confirmation"""
-    token: str
-    new_password: str
+    """Password reset confirmation schema"""
+    token: str = Field(..., description="Password reset token")
+    new_password: str = Field(..., min_length=8, description="New password")
     
     @validator('new_password')
-    def validate_new_password(cls, v):
-        is_valid, error_msg = validate_password_strength(v)
-        if not is_valid:
-            raise ValueError(error_msg)
+    def validate_password(cls, v):
+        """Validate password strength"""
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        
+        if not any(c.islower() for c in v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one digit')
+        
         return v
 
+class PasswordChange(BaseModel):
+    """Password change schema"""
+    current_password: str = Field(..., description="Current password")
+    new_password: str = Field(..., min_length=8, description="New password")
+    
+    @validator('new_password')
+    def validate_password(cls, v):
+        """Validate password strength"""
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        
+        if not any(c.islower() for c in v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one digit')
+        
+        return v
+
+class EmailVerification(BaseModel):
+    """Email verification schema"""
+    token: str = Field(..., description="Email verification token")
+
 class UserProfile(BaseModel):
-    """Schema for user profile response"""
+    """User profile response schema"""
     id: int
     email: str
-    first_name: str
-    last_name: str
     full_name: str
-    position: Optional[str]
-    role: str
-    organization_id: int
+    role: UserRole
     is_active: bool
-    is_email_verified: bool
-    last_login: Optional[str]
-    created_at: str
+    is_verified: bool
+    created_at: datetime
+    last_login: Optional[datetime]
+    organization_id: int
     
     class Config:
         from_attributes = True
+
+class OrganizationInfo(BaseModel):
+    """Organization information schema"""
+    id: int
+    name: str
+    domain: Optional[str]
+    description: Optional[str]
+    is_active: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class UserWithOrganization(BaseModel):
+    """User with organization information"""
+    id: int
+    email: str
+    full_name: str
+    role: UserRole
+    is_active: bool
+    is_verified: bool
+    created_at: datetime
+    last_login: Optional[datetime]
+    organization: OrganizationInfo
+    
+    class Config:
+        from_attributes = True
+
+class AuthResponse(BaseModel):
+    """Authentication response schema"""
+    user: UserWithOrganization
+    tokens: TokenResponse
+    message: str = "Authentication successful"
+
+class RegistrationResponse(BaseModel):
+    """Registration response schema"""
+    user: UserProfile
+    message: str = "Registration successful. Please check your email for verification."
+
+class MessageResponse(BaseModel):
+    """Generic message response schema"""
+    message: str
+    success: bool = True
+
+class ErrorResponse(BaseModel):
+    """Error response schema"""
+    detail: str
+    error_code: Optional[str] = None
+    success: bool = False
+
+# Request validation schemas
+class InviteUserRequest(BaseModel):
+    """Invite user request schema"""
+    email: EmailStr = Field(..., description="User email to invite")
+    role: UserRole = Field(default=UserRole.USER, description="User role")
+    full_name: Optional[str] = Field(None, description="User full name")
+
+class UpdateUserRequest(BaseModel):
+    """Update user request schema"""
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    role: Optional[UserRole] = Field(None)
+    is_active: Optional[bool] = Field(None)
+
+class UpdateProfileRequest(BaseModel):
+    """Update profile request schema"""
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    
+# Token payload schemas
+class TokenPayload(BaseModel):
+    """Token payload schema"""
+    sub: str  # User ID
+    email: str
+    role: str
+    exp: int
+    type: str  # access or refresh
 

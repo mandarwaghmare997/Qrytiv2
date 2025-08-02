@@ -5,10 +5,16 @@ Represents users of the Qrytiv2 platform
 Developed by: Qryti Dev Team
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
+import enum
+
+class UserRole(enum.Enum):
+    """User role enumeration"""
+    ADMIN = "admin"
+    USER = "user"
 
 class User(Base):
     """
@@ -19,20 +25,19 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), nullable=False, unique=True, index=True)
-    password_hash = Column(String(255), nullable=False)
-    first_name = Column(String(100), nullable=False)
-    last_name = Column(String(100), nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(200), nullable=False)
     position = Column(String(100), nullable=True)
     
     # Role-based access control
-    role = Column(String(50), nullable=False, default="user")  # admin, user
+    role = Column(Enum(UserRole), nullable=False, default=UserRole.USER)
     
     # Organization relationship
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
     
     # Status and activity tracking
     is_active = Column(Boolean, default=True, nullable=False)
-    is_email_verified = Column(Boolean, default=False, nullable=False)
+    is_verified = Column(Boolean, default=False, nullable=False)
     last_login = Column(DateTime(timezone=True), nullable=True)
     
     # Timestamps
@@ -46,17 +51,12 @@ class User(Base):
     audit_logs = relationship("AuditLog", back_populates="user")
     
     def __repr__(self):
-        return f"<User(id={self.id}, email='{self.email}', role='{self.role}')>"
-    
-    @property
-    def full_name(self):
-        """Get user's full name"""
-        return f"{self.first_name} {self.last_name}"
+        return f"<User(id={self.id}, email='{self.email}', role='{self.role.value}')>"
     
     @property
     def is_admin(self):
         """Check if user has admin role"""
-        return self.role == "admin"
+        return self.role == UserRole.ADMIN
     
     @property
     def domain(self):
