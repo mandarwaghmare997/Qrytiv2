@@ -3,64 +3,74 @@ import './App.css';
 import apiService from './services/api.js';
 import config from './config.js';
 import AIModelRegistry from './components/AIModelRegistry.jsx';
-import AdminDashboard from './components/AdminDashboard.jsx';
+import AdminDashboardNew from './components/AdminDashboardNew.jsx';
 import ISO42001Compliance from './components/ISO42001Compliance.jsx';
+import GapAssessment from './components/GapAssessment.jsx';
 import qrytiLogo from './assets/qryti-logo.png';
 import './components/AIModelRegistry.css';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [apiStatus, setApiStatus] = useState('checking');
-  const [currentView, setCurrentView] = useState('dashboard'); // dashboard, ai-models, admin, iso-compliance
-
-  // Login form state
+  const [currentView, setCurrentView] = useState('dashboard');
   const [loginForm, setLoginForm] = useState({
     email: '',
     password: ''
   });
+  const [otpForm, setOtpForm] = useState({
+    email: '',
+    otpCode: '',
+    deviceFingerprint: '',
+    rememberDevice: false
+  });
+  const [showOtpForm, setShowOtpForm] = useState(false);
+  const [apiStatus, setApiStatus] = useState('checking');
 
-  // Check API health and authentication status on mount
   useEffect(() => {
-    checkApiHealth();
-    checkAuthStatus();
+    initializeApp();
   }, []);
 
-  const checkApiHealth = async () => {
+  const initializeApp = async () => {
     try {
+      // Check API health
       await apiService.healthCheck();
-      setApiStatus('healthy');
-    } catch (error) {
-      setApiStatus('error');
-      console.error('API health check failed:', error);
-    }
-  };
+      setApiStatus('connected');
 
-  const checkAuthStatus = async () => {
-    const token = apiService.getToken();
-    if (token) {
-      try {
-        // Validate token and get user info
-        const response = await fetch(`${config.API_BASE_URL}/auth/me`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        if (response.ok) {
-          const userData = await response.json();
+      // Check if user is already authenticated
+      if (apiService.isAuthenticated()) {
+        const userData = apiService.getUser();
+        if (userData) {
           setUser(userData);
-          setIsAuthenticated(true);
+          apiService.startSessionRefresh();
         } else {
-          // Token is invalid, remove it
-          apiService.removeToken();
+          // Token exists but no user data, try to get session info
+          try {
+            const sessionInfo = await apiService.getSessionInfo();
+            if (sessionInfo && sessionInfo.email) {
+              // Create minimal user object from session info
+              const userFromSession = {
+                email: sessionInfo.email,
+                full_name: sessionInfo.email.split('@')[0],
+                role: sessionInfo.email === 'hello@qryti.com' ? 'admin' : 'user'
+              };
+              setUser(userFromSession);
+              apiService.setUser(userFromSession);
+              apiService.startSessionRefresh();
+            }
+          } catch (error) {
+            // Session invalid, clear auth
+            console.log('Session invalid, clearing auth');
+            apiService.logout();
+          }
         }
-      } catch (error) {
-        console.error('Auth check failed:', error);
-        apiService.removeToken();
       }
+    } catch (error) {
+      console.error('Failed to connect to API:', error);
+      setApiStatus('disconnected');
+      setError('Unable to connect to server. Please check your connection.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -76,48 +86,116 @@ function App() {
     }
   };
 
+  const handleOtpInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setOtpForm(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+    // Clear error when user starts typing
+    if (error) {
+      setError('');
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+    setLoading(true);
 
     try {
       const response = await apiService.login(loginForm.email, loginForm.password);
       
-      if (response.access_token) {
-        apiService.setToken(response.access_token);
-        setUser(response.user || { email: loginForm.email, name: 'User' });
-        setIsAuthenticated(true);
-        setCurrentView('dashboard');
+      if (response.requires_otp) {
+        // OTP required for new device
+        setOtpForm({
+          email: loginForm.email,
+          otpCode: '',
+          deviceFingerprint: response.device_fingerprint,
+          rememberDevice: false
+        });
+        setShowOtpForm(true);
+        setError(''); // Clear any previous errors
       } else {
-        setError('Login failed. Please check your credentials.');
+        // Direct login successful
+        setUser(response.user);
+        apiService.startSessionRefresh();
+        setLoginForm({ email: '', password: '' });
       }
     } catch (error) {
       console.error('Login error:', error);
       if (error.message.includes('Network')) {
         setError('Network error. Please check your connection and try again.');
       } else {
-        setError('Login failed. Please check your credentials.');
+        setError(error.message || 'Login failed. Please check your credentials.');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    apiService.removeToken();
-    setUser(null);
-    setIsAuthenticated(false);
-    setCurrentView('dashboard');
-    setLoginForm({ email: '', password: '' });
+  const handleOtpVerification = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await apiService.verifyOTP(
+        otpForm.email,
+        otpForm.otpCode,
+        otpForm.deviceFingerprint,
+        otpForm.rememberDevice
+      );
+
+      setUser(response.user);
+      apiService.startSessionRefresh();
+      setShowOtpForm(false);
+      setOtpForm({ email: '', otpCode: '', deviceFingerprint: '', rememberDevice: false });
+      setLoginForm({ email: '', password: '' });
+    } catch (error) {
+      console.error('OTP verification error:', error);
+      setError(error.message || 'Verification failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await apiService.logout();
+      apiService.stopSessionRefresh();
+      setUser(null);
+      setCurrentView('dashboard');
+      setError('');
+      setShowOtpForm(false);
+      setLoginForm({ email: '', password: '' });
+      setOtpForm({ email: '', otpCode: '', deviceFingerprint: '', rememberDevice: false });
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Force logout even if API call fails
+      apiService.logout();
+      apiService.stopSessionRefresh();
+      setUser(null);
+    }
   };
 
   const handleNavigate = (view) => {
     setCurrentView(view);
   };
 
+  if (loading) {
+    return (
+      <div className="app-loading">
+        <div className="loading-spinner">
+          <div className="spinner"></div>
+          <p>Loading Qryti Platform...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Show login form if not authenticated
-  if (!isAuthenticated) {
+  if (!user) {
     return (
       <div className="login-container">
         <div className="login-background">
@@ -128,58 +206,128 @@ function App() {
               <p>ISO 42001 AI Governance Platform</p>
             </div>
 
-            <form onSubmit={handleLogin} className="login-form">
-              {error && (
-                <div className="error-message">
-                  {error}
+            {!showOtpForm ? (
+              <form onSubmit={handleLogin} className="login-form">
+                {error && (
+                  <div className="error-message">
+                    <span className="error-icon">⚠️</span>
+                    {error}
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label htmlFor="email">Email</label>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    value={loginForm.email}
+                    onChange={handleInputChange}
+                    placeholder="Enter your email"
+                    required
+                    disabled={loading}
+                    autoComplete="email"
+                  />
                 </div>
-              )}
 
-              <div className="form-group">
-                <label htmlFor="email">Email</label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={loginForm.email}
-                  onChange={handleInputChange}
-                  placeholder="Enter your email"
-                  required
+                <div className="form-group">
+                  <label htmlFor="password">Password</label>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    value={loginForm.password}
+                    onChange={handleInputChange}
+                    placeholder="Enter your password"
+                    required
+                    disabled={loading}
+                    autoComplete="current-password"
+                  />
+                </div>
+
+                <button 
+                  type="submit" 
+                  className="login-button"
                   disabled={loading}
-                  autoComplete="email"
-                />
-              </div>
+                >
+                  {loading ? 'Signing in...' : 'Sign In'}
+                </button>
 
-              <div className="form-group">
-                <label htmlFor="password">Password</label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  value={loginForm.password}
-                  onChange={handleInputChange}
-                  placeholder="Enter your password"
-                  required
-                  disabled={loading}
-                  autoComplete="current-password"
-                />
-              </div>
+                <div className="login-footer">
+                  <a href="#" className="forgot-password">Forgot Password?</a>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleOtpVerification} className="otp-form">
+                <div className="otp-header">
+                  <h3>🔐 Verify New Device</h3>
+                  <p>We've sent a verification code to <strong>{otpForm.email}</strong></p>
+                  <p className="otp-note">Check your email for the 6-digit code</p>
+                </div>
 
-              <button 
-                type="submit" 
-                className="login-button"
-                disabled={loading}
-              >
-                {loading ? 'Signing in...' : 'Sign In'}
-              </button>
+                {error && (
+                  <div className="error-message">
+                    <span className="error-icon">⚠️</span>
+                    {error}
+                  </div>
+                )}
 
-              <div className="login-footer">
-                <a href="#" className="forgot-password">Forgot Password?</a>
-              </div>
-            </form>
+                <div className="form-group">
+                  <label htmlFor="otpCode">Verification Code</label>
+                  <input
+                    id="otpCode"
+                    name="otpCode"
+                    type="text"
+                    value={otpForm.otpCode}
+                    onChange={handleOtpInputChange}
+                    placeholder="Enter 6-digit code"
+                    maxLength="6"
+                    required
+                    disabled={loading}
+                    className="otp-input"
+                  />
+                </div>
+
+                <div className="form-group checkbox-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      name="rememberDevice"
+                      checked={otpForm.rememberDevice}
+                      onChange={handleOtpInputChange}
+                      disabled={loading}
+                    />
+                    <span className="checkmark"></span>
+                    Remember this device for 30 days
+                  </label>
+                </div>
+
+                <div className="otp-actions">
+                  <button 
+                    type="button" 
+                    className="back-btn"
+                    onClick={() => {
+                      setShowOtpForm(false);
+                      setError('');
+                    }}
+                    disabled={loading}
+                  >
+                    ← Back to Login
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="verify-btn" 
+                    disabled={loading || otpForm.otpCode.length !== 6}
+                  >
+                    {loading ? 'Verifying...' : 'Verify & Login'}
+                  </button>
+                </div>
+              </form>
+            )}
 
             <div className="api-status">
-              API Status: {apiStatus === 'healthy' ? '✅ Connected' : apiStatus === 'error' ? '❌ Disconnected' : '🔄 Checking...'}
+              <span className={`status-indicator ${apiStatus}`}></span>
+              API Status: {apiStatus === 'connected' ? '✅ Connected' : apiStatus === 'disconnected' ? '❌ Disconnected' : '🔄 Checking...'}
             </div>
           </div>
         </div>
@@ -188,12 +336,12 @@ function App() {
   }
 
   // Determine if user is admin
-  const isAdmin = user?.role === 'admin' || user?.email?.includes('admin');
+  const isAdmin = user?.role === 'admin' || user?.email === 'hello@qryti.com';
 
   // Show admin dashboard for admin users
   if (isAdmin && currentView === 'dashboard') {
     return (
-      <AdminDashboard 
+      <AdminDashboardNew 
         user={user} 
         onNavigate={handleNavigate}
         onLogout={handleLogout}
@@ -212,7 +360,7 @@ function App() {
               <h1>Qryti Platform</h1>
             </div>
             <div className="header-right">
-              <span>Welcome, {user?.name || user?.email}</span>
+              <span>Welcome, {user?.full_name || user?.email}</span>
               <button onClick={handleLogout} className="logout-btn">Logout</button>
             </div>
           </div>
@@ -240,6 +388,15 @@ function App() {
                 <div className="card-content">
                   <h3>ISO 42001 Compliance</h3>
                   <p>Start your ISO 42001 journey for {user?.organization || 'your organization'}</p>
+                </div>
+                <div className="card-arrow">→</div>
+              </div>
+
+              <div className="dashboard-card clickable" onClick={() => handleNavigate('gap-assessment')}>
+                <div className="card-icon">🎯</div>
+                <div className="card-content">
+                  <h3>Gap Assessment</h3>
+                  <p>Evaluate your current compliance status</p>
                 </div>
                 <div className="card-arrow">→</div>
               </div>
@@ -280,6 +437,13 @@ function App() {
       )}
       {currentView === 'iso-compliance' && (
         <ISO42001Compliance 
+          user={user} 
+          onNavigate={handleNavigate}
+          onLogout={handleLogout}
+        />
+      )}
+      {currentView === 'gap-assessment' && (
+        <GapAssessment 
           user={user} 
           onNavigate={handleNavigate}
           onLogout={handleLogout}

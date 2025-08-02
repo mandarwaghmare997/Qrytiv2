@@ -1,11 +1,11 @@
 """
-Qrytiv2 Simple Backend API
+Qrytiv2 Simple Backend API - Fixed Version
 Lightweight Flask application for production deployment
 
 Developed by: Qryti Dev Team
 """
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import os
 import logging
@@ -47,6 +47,10 @@ DEMO_USERS = {
         "organization": "Qryti Demo Organization"
     }
 }
+
+# Mock data storage
+CLIENTS = []
+PROJECTS = []
 
 @app.route('/')
 def root():
@@ -108,137 +112,33 @@ def login():
         logger.error(f"Login error: {e}")
         return jsonify({"detail": "Login failed. Please try again."}), 500
 
-@app.route('/api/v1/auth/register', methods=['POST'])
-def register():
-    """Registration endpoint"""
-    try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({"detail": "Request body required"}), 400
-            
-        email = data.get('email')
-        password = data.get('password')
-        full_name = data.get('full_name')
-        organization_name = data.get('organization_name')
-        
-        if not all([email, password, full_name, organization_name]):
-            return jsonify({"detail": "All fields required: email, password, full_name, organization_name"}), 400
-            
-        # Check if user already exists
-        if email in DEMO_USERS:
-            return jsonify({"detail": "User with this email already exists"}), 400
-            
-        # For demo purposes, just return success
-        return jsonify({
-            "message": "Registration successful. Please check your email for verification.",
-            "user": {
-                "email": email,
-                "full_name": full_name,
-                "organization": organization_name
-            }
-        })
-        
-    except Exception as e:
-        logger.error(f"Registration error: {e}")
-        return jsonify({"detail": "Registration failed. Please try again."}), 500
-
-@app.route('/api/v1/users/', methods=['GET'])
-def list_users():
-    """List users endpoint (requires authentication)"""
+@app.route('/api/v1/admin/stats', methods=['GET'])
+def get_admin_stats():
+    """Get admin dashboard statistics"""
     auth_header = request.headers.get('Authorization')
     
     if not auth_header or not auth_header.startswith('Bearer '):
         return jsonify({"detail": "Authentication required"}), 401
-        
-    # For demo purposes, return demo users
-    users = []
-    for email, user_data in DEMO_USERS.items():
-        users.append({
-            "email": email,
-            "full_name": user_data['full_name'],
-            "role": user_data['role'],
-            "organization": user_data['organization'],
-            "is_active": True,
-            "is_verified": True
-        })
     
-    return jsonify(users)
-
-@app.route('/api/v1/info')
-def app_info():
-    """Application information endpoint"""
-    return jsonify({
-        "app_name": "Qrytiv2",
-        "version": "2.0.0",
-        "environment": "production",
-        "debug": app.config['DEBUG'],
-        "features": {
-            "authentication": True,
-            "user_management": True,
-            "demo_mode": True,
-            "cors_enabled": True
-        },
-        "endpoints": {
-            "health": "/health",
-            "login": "/api/v1/auth/login",
-            "register": "/api/v1/auth/register",
-            "users": "/api/v1/users/"
-        }
-    })
-
-@app.route('/api/docs')
-def api_docs():
-    """API documentation endpoint"""
-    return jsonify({
-        "title": "Qrytiv2 API Documentation",
-        "version": "2.0.0",
-        "description": "ISO 42001 AI Governance Platform API",
-        "endpoints": {
-            "GET /": "Root endpoint with API information",
-            "GET /health": "Health check endpoint",
-            "POST /api/v1/auth/login": "User authentication",
-            "POST /api/v1/auth/register": "User registration",
-            "GET /api/v1/users/": "List users (authenticated)",
-            "GET /api/v1/info": "Application information"
-        },
-        "demo_users": {
-            "admin@demo.qryti.com": "admin123",
-            "user@demo.qryti.com": "demo123"
-        }
-    })
-
-# Error handlers
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({"detail": "Endpoint not found"}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({"detail": "Internal server error"}), 500
-
-# Request logging middleware
-@app.before_request
-def log_request():
-    logger.info(f"{request.method} {request.path} - {request.remote_addr}")
-
-@app.after_request
-def log_response(response):
-    logger.info(f"Response: {response.status_code}")
-    return response
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    host = os.environ.get('HOST', '0.0.0.0')
+    # Calculate statistics
+    total_clients = len(CLIENTS)
+    total_projects = len(PROJECTS)
+    active_projects = len([p for p in PROJECTS if p.get('status') == 'active'])
+    avg_compliance = sum([c.get('compliance_score', 0) for c in CLIENTS]) / max(total_clients, 1)
     
-    logger.info(f"Starting Qrytiv2 API on {host}:{port}")
-    app.run(host=host, port=port, debug=app.config['DEBUG'])
-
-
-
-# Mock data storage
-CLIENTS = []
-PROJECTS = []
+    return jsonify({
+        "total_clients": total_clients,
+        "total_projects": total_projects,
+        "active_projects": active_projects,
+        "avg_compliance_score": round(avg_compliance, 1),
+        "recent_activity": [
+            {
+                "type": "client_created",
+                "message": f"New client registered: {CLIENTS[-1]['name']}" if CLIENTS else "No recent activity",
+                "timestamp": CLIENTS[-1]['created_at'] if CLIENTS else datetime.utcnow().isoformat()
+            }
+        ]
+    })
 
 @app.route('/api/v1/admin/clients', methods=['GET'])
 def get_clients():
@@ -326,29 +226,6 @@ def create_client():
         logger.error(f"Create client error: {e}")
         return jsonify({"detail": "Failed to create client"}), 500
 
-@app.route('/api/v1/admin/clients/<int:client_id>', methods=['DELETE'])
-def delete_client(client_id):
-    """Delete a client (admin only)"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({"detail": "Authentication required"}), 401
-        
-        global CLIENTS, PROJECTS
-        
-        # Find and remove client
-        CLIENTS = [c for c in CLIENTS if c['id'] != client_id]
-        
-        # Remove associated projects
-        PROJECTS = [p for p in PROJECTS if p['client_id'] != client_id]
-        
-        return jsonify({"message": "Client deleted successfully"})
-        
-    except Exception as e:
-        logger.error(f"Delete client error: {e}")
-        return jsonify({"detail": "Failed to delete client"}), 500
-
 @app.route('/api/v1/admin/projects', methods=['GET'])
 def get_projects():
     """Get all projects (admin only)"""
@@ -422,73 +299,6 @@ def create_project():
     except Exception as e:
         logger.error(f"Create project error: {e}")
         return jsonify({"detail": "Failed to create project"}), 500
-
-@app.route('/api/v1/admin/projects/<int:project_id>', methods=['DELETE'])
-def delete_project(project_id):
-    """Delete a project (admin only)"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({"detail": "Authentication required"}), 401
-        
-        global CLIENTS, PROJECTS
-        
-        # Find project to get client_id
-        project_to_delete = None
-        for p in PROJECTS:
-            if p['id'] == project_id:
-                project_to_delete = p
-                break
-        
-        if not project_to_delete:
-            return jsonify({"detail": "Project not found"}), 404
-        
-        # Remove project
-        PROJECTS = [p for p in PROJECTS if p['id'] != project_id]
-        
-        # Update client projects count
-        client_id = project_to_delete['client_id']
-        for client in CLIENTS:
-            if client['id'] == client_id:
-                client['projects_count'] = len([p for p in PROJECTS if p['client_id'] == client_id])
-                break
-        
-        return jsonify({"message": "Project deleted successfully"})
-        
-    except Exception as e:
-        logger.error(f"Delete project error: {e}")
-        return jsonify({"detail": "Failed to delete project"}), 500
-
-@app.route('/api/v1/admin/stats', methods=['GET'])
-def get_admin_stats():
-    """Get admin dashboard statistics"""
-    auth_header = request.headers.get('Authorization')
-    
-    if not auth_header or not auth_header.startswith('Bearer '):
-        return jsonify({"detail": "Authentication required"}), 401
-    
-    # Calculate statistics
-    total_clients = len(CLIENTS)
-    total_projects = len(PROJECTS)
-    active_projects = len([p for p in PROJECTS if p['status'] == 'active'])
-    avg_compliance = sum([c.get('compliance_score', 0) for c in CLIENTS]) / max(total_clients, 1)
-    
-    return jsonify({
-        "total_clients": total_clients,
-        "total_projects": total_projects,
-        "active_projects": active_projects,
-        "avg_compliance_score": round(avg_compliance, 1),
-        "recent_activity": [
-            {
-                "type": "client_created",
-                "message": f"New client registered: {CLIENTS[-1]['name']}" if CLIENTS else "No recent activity",
-                "timestamp": CLIENTS[-1]['created_at'] if CLIENTS else datetime.utcnow().isoformat()
-            }
-        ]
-    })
-
-
 
 # Error handlers
 @app.errorhandler(404)

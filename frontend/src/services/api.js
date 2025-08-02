@@ -7,16 +7,34 @@ class ApiService {
   constructor() {
     this.baseURL = config.API_BASE_URL;
     this.token = localStorage.getItem('auth_token');
+    this.user = JSON.parse(localStorage.getItem('user_data') || 'null');
   }
 
-  // Set authentication token
+  // Set authentication token and user data
   setToken(token) {
     this.token = token;
     if (token) {
       localStorage.setItem('auth_token', token);
     } else {
       localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_data');
+      this.user = null;
     }
+  }
+
+  // Set user data
+  setUser(userData) {
+    this.user = userData;
+    if (userData) {
+      localStorage.setItem('user_data', JSON.stringify(userData));
+    } else {
+      localStorage.removeItem('user_data');
+    }
+  }
+
+  // Get user data
+  getUser() {
+    return this.user;
   }
 
   // Get authentication headers
@@ -44,6 +62,13 @@ class ApiService {
     try {
       const response = await fetch(url, requestOptions);
       
+      // Handle session expiry
+      if (response.status === 401) {
+        this.logout();
+        window.location.reload();
+        return;
+      }
+      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
@@ -58,12 +83,12 @@ class ApiService {
 
   // Health check
   async healthCheck() {
-    return this.request(config.ENDPOINTS.HEALTH, { auth: false });
+    return this.request('/health', { auth: false });
   }
 
   // User authentication
   async login(email, password) {
-    const response = await this.request(config.ENDPOINTS.LOGIN, {
+    const response = await this.request('/api/v1/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
       auth: false
@@ -71,9 +96,75 @@ class ApiService {
 
     if (response.access_token) {
       this.setToken(response.access_token);
+      this.setUser(response.user);
     }
 
     return response;
+  }
+
+  // OTP verification
+  async verifyOTP(email, otpCode, deviceFingerprint, rememberDevice = false) {
+    const response = await this.request('/api/v1/auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        email, 
+        otp_code: otpCode, 
+        device_fingerprint: deviceFingerprint,
+        remember_device: rememberDevice 
+      }),
+      auth: false
+    });
+
+    if (response.access_token) {
+      this.setToken(response.access_token);
+      this.setUser(response.user);
+    }
+
+    return response;
+  }
+
+  // Refresh session
+  async refreshSession() {
+    try {
+      return await this.request('/api/v1/auth/refresh', {
+        method: 'POST'
+      });
+    } catch (error) {
+      this.logout();
+      throw error;
+    }
+  }
+
+  // Get session info
+  async getSessionInfo() {
+    return this.request('/api/v1/auth/session-info');
+  }
+
+  // Admin endpoints
+  async getAdminStats() {
+    return this.request('/api/v1/admin/stats');
+  }
+
+  async getClients() {
+    return this.request('/api/v1/admin/clients');
+  }
+
+  async createClient(clientData) {
+    return this.request('/api/v1/admin/clients', {
+      method: 'POST',
+      body: JSON.stringify(clientData)
+    });
+  }
+
+  async getProjects() {
+    return this.request('/api/v1/admin/projects');
+  }
+
+  async createProject(projectData) {
+    return this.request('/api/v1/admin/projects', {
+      method: 'POST',
+      body: JSON.stringify(projectData)
+    });
   }
 
   // User registration
@@ -101,18 +192,52 @@ class ApiService {
   }
 
   // Logout
-  logout() {
-    this.setToken(null);
+  async logout() {
+    try {
+      await this.request('/api/v1/auth/logout', {
+        method: 'POST'
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      this.setToken(null);
+      this.setUser(null);
+    }
   }
 
   // Check if user is authenticated
   isAuthenticated() {
-    return !!this.token;
+    return !!this.token && !!this.user;
   }
 
   // Get stored token
   getToken() {
     return this.token;
+  }
+
+  // Auto-refresh session periodically
+  startSessionRefresh() {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+    }
+
+    this.refreshInterval = setInterval(async () => {
+      if (this.isAuthenticated()) {
+        try {
+          await this.refreshSession();
+        } catch (error) {
+          console.error('Session refresh failed:', error);
+        }
+      }
+    }, 5 * 60 * 1000); // Refresh every 5 minutes
+  }
+
+  // Stop session refresh
+  stopSessionRefresh() {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+      this.refreshInterval = null;
+    }
   }
 }
 

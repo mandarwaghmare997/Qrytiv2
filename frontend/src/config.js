@@ -3,7 +3,7 @@
 
 const config = {
   // API Base URL - Production backend
-  API_BASE_URL: 'https://3dhkilcj59gx.manus.space',
+  API_BASE_URL: 'https://5000-iimkiu1zbs597gtiloq24-70f7ccea.manusvm.computer',
   
   // Environment
   ENVIRONMENT: 'production',
@@ -18,16 +18,10 @@ const config = {
     DOCS: '/api/docs'
   },
   
-  // Demo credentials for testing
-  DEMO_USERS: {
-    admin: {
-      email: 'admin@demo.qryti.com',
-      password: 'admin123'
-    },
-    user: {
-      email: 'user@demo.qryti.com', 
-      password: 'demo123'
-    }
+  // Admin credentials
+  ADMIN_CREDENTIALS: {
+    email: 'hello@qryti.com',
+    password: 'Mandar@123'
   },
   
   // App settings
