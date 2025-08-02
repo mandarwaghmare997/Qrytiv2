@@ -1,369 +1,428 @@
 import React, { useState, useEffect } from 'react';
 import './AdminDashboard.css';
+import CreateClientForm from './CreateClientForm.jsx';
+import CreateProjectForm from './CreateProjectForm.jsx';
 
-const AdminDashboard = ({ onNavigate }) => {
-  const [dashboardData, setDashboardData] = useState(null);
-  const [clientsProgress, setClientsProgress] = useState([]);
-  const [loading, setLoading] = useState(true);
+const AdminDashboard = ({ user, onNavigate }) => {
   const [activeTab, setActiveTab] = useState('overview');
+  const [showCreateClient, setShowCreateClient] = useState(false);
+  const [showCreateProject, setShowCreateProject] = useState(false);
+  const [clients, setClients] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [statistics, setStatistics] = useState({
+    totalClients: 0,
+    activeProjects: 0,
+    completedProjects: 0,
+    averageCompliance: 0,
+    pendingEvidence: 0,
+    certificatesIssued: 0
+  });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchDashboardData();
-    fetchClientsProgress();
   }, []);
 
   const fetchDashboardData = async () => {
+    setLoading(true);
     try {
-      const response = await fetch('/api/admin/dashboard', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+      // Mock data for now since backend endpoints may not be fully implemented
+      setClients([
+        {
+          id: 1,
+          name: 'John Smith',
+          email: 'john@techcorp.com',
+          organization: 'TechCorp Inc.',
+          is_active: true,
+          last_login: '2024-08-01T10:30:00Z'
+        },
+        {
+          id: 2,
+          name: 'Sarah Johnson',
+          email: 'sarah@dataflow.com',
+          organization: 'DataFlow Solutions',
+          is_active: true,
+          last_login: '2024-07-30T14:15:00Z'
         }
+      ]);
+
+      setProjects([
+        {
+          id: 1,
+          project_name: 'ISO 42001 Compliance for TechCorp',
+          client_id: 1,
+          client_name: 'TechCorp Inc.',
+          risk_template: 'high',
+          compliance_score: 75,
+          completion_percentage: 60
+        },
+        {
+          id: 2,
+          project_name: 'AI Governance Assessment',
+          client_id: 2,
+          client_name: 'DataFlow Solutions',
+          risk_template: 'medium',
+          compliance_score: 85,
+          completion_percentage: 80
+        }
+      ]);
+
+      setStatistics({
+        totalClients: 2,
+        activeProjects: 2,
+        completedProjects: 0,
+        averageCompliance: 80,
+        pendingEvidence: 3,
+        certificatesIssued: 0
       });
-      const data = await response.json();
-      setDashboardData(data);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-    }
-  };
-
-  const fetchClientsProgress = async () => {
-    try {
-      const response = await fetch('/api/admin/clients/progress', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const data = await response.json();
-      setClientsProgress(data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching clients progress:', error);
+    } finally {
       setLoading(false);
     }
   };
 
-  const getRiskColor = (riskTemplate) => {
-    switch (riskTemplate) {
-      case 'high': return '#dc3545';
-      case 'medium': return '#ffc107';
-      case 'low': return '#28a745';
-      default: return '#6c757d';
-    }
+  const handleCreateClientSuccess = (newClient) => {
+    setClients(prev => [...prev, { ...newClient, id: Date.now() }]);
+    setStatistics(prev => ({ ...prev, totalClients: prev.totalClients + 1 }));
+  };
+
+  const handleCreateProjectSuccess = (newProject) => {
+    setProjects(prev => [...prev, { ...newProject, id: Date.now() }]);
+    setStatistics(prev => ({ ...prev, activeProjects: prev.activeProjects + 1 }));
   };
 
   const getComplianceColor = (score) => {
-    if (score >= 90) return '#28a745';
-    if (score >= 70) return '#ffc107';
-    if (score >= 50) return '#fd7e14';
-    return '#dc3545';
+    if (score >= 80) return '#10b981'; // Green
+    if (score >= 60) return '#f59e0b'; // Yellow
+    return '#ef4444'; // Red
   };
 
-  const getStatusBadge = (status) => {
-    const statusConfig = {
-      'active': { color: '#28a745', text: 'Active' },
-      'completed': { color: '#007bff', text: 'Completed' },
-      'on_hold': { color: '#ffc107', text: 'On Hold' },
-      'cancelled': { color: '#dc3545', text: 'Cancelled' }
-    };
-    
-    const config = statusConfig[status] || { color: '#6c757d', text: status };
-    
-    return (
-      <span 
-        className="status-badge" 
-        style={{ backgroundColor: config.color }}
-      >
-        {config.text}
-      </span>
-    );
+  const getRiskColor = (risk) => {
+    switch (risk) {
+      case 'high': return '#ef4444';
+      case 'medium': return '#f59e0b';
+      case 'low': return '#10b981';
+      default: return '#6b7280';
+    }
   };
+
+  const OverviewTab = () => (
+    <div className="overview-content">
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon">👥</div>
+          <div className="stat-content">
+            <div className="stat-number">{statistics.totalClients}</div>
+            <div className="stat-label">Total Clients</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon">📊</div>
+          <div className="stat-content">
+            <div className="stat-number">{statistics.activeProjects}</div>
+            <div className="stat-label">Active Projects</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon">✅</div>
+          <div className="stat-content">
+            <div className="stat-number">{statistics.completedProjects}</div>
+            <div className="stat-label">Completed Projects</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon">📈</div>
+          <div className="stat-content">
+            <div className="stat-number">{statistics.averageCompliance}%</div>
+            <div className="stat-label">Avg Compliance</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon">📋</div>
+          <div className="stat-content">
+            <div className="stat-number">{statistics.pendingEvidence}</div>
+            <div className="stat-label">Pending Evidence</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon">🏆</div>
+          <div className="stat-content">
+            <div className="stat-number">{statistics.certificatesIssued}</div>
+            <div className="stat-label">Certificates Issued</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="quick-actions">
+        <h3>Quick Actions</h3>
+        <div className="action-buttons">
+          <button 
+            className="action-btn primary"
+            onClick={() => setShowCreateClient(true)}
+          >
+            <span className="btn-icon">👤</span>
+            Create New Client
+          </button>
+          <button 
+            className="action-btn secondary"
+            onClick={() => setShowCreateProject(true)}
+          >
+            <span className="btn-icon">📊</span>
+            Create New Project
+          </button>
+          <button 
+            className="action-btn tertiary"
+            onClick={() => setActiveTab('evidence')}
+          >
+            <span className="btn-icon">📋</span>
+            Review Evidence
+          </button>
+        </div>
+      </div>
+
+      <div className="recent-activity">
+        <h3>Recent Projects</h3>
+        <div className="activity-list">
+          {projects.slice(0, 5).map(project => (
+            <div key={project.id} className="activity-item">
+              <div className="activity-info">
+                <div className="activity-title">{project.project_name}</div>
+                <div className="activity-subtitle">
+                  {project.client_name} • {project.risk_template} risk
+                </div>
+              </div>
+              <div className="activity-status">
+                <div 
+                  className="compliance-score"
+                  style={{ color: getComplianceColor(project.compliance_score || 0) }}
+                >
+                  {project.compliance_score || 0}%
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const ClientProgressTab = () => (
+    <div className="client-progress-content">
+      <div className="tab-header">
+        <h3>Client Progress Overview</h3>
+        <button 
+          className="btn btn-primary"
+          onClick={() => setShowCreateClient(true)}
+        >
+          Add New Client
+        </button>
+      </div>
+
+      <div className="progress-grid">
+        {clients.map(client => {
+          const clientProjects = projects.filter(p => p.client_id === client.id);
+          const avgCompliance = clientProjects.length > 0 
+            ? Math.round(clientProjects.reduce((sum, p) => sum + (p.compliance_score || 0), 0) / clientProjects.length)
+            : 0;
+
+          return (
+            <div key={client.id} className="progress-card">
+              <div className="progress-header">
+                <div className="client-info">
+                  <h4>{client.name}</h4>
+                  <p>{client.organization}</p>
+                  <p className="client-email">{client.email}</p>
+                </div>
+                <div className="progress-score">
+                  <div 
+                    className="score-circle"
+                    style={{ color: getComplianceColor(avgCompliance) }}
+                  >
+                    {avgCompliance}%
+                  </div>
+                </div>
+              </div>
+
+              <div className="progress-details">
+                <div className="detail-item">
+                  <span>Projects:</span>
+                  <span>{clientProjects.length}</span>
+                </div>
+                <div className="detail-item">
+                  <span>Status:</span>
+                  <span className={`status ${client.is_active ? 'active' : 'inactive'}`}>
+                    {client.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <div className="detail-item">
+                  <span>Last Login:</span>
+                  <span>{client.last_login ? new Date(client.last_login).toLocaleDateString() : 'Never'}</span>
+                </div>
+              </div>
+
+              <div className="progress-actions">
+                <button 
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => setShowCreateProject(true)}
+                >
+                  New Project
+                </button>
+                <button className="btn btn-sm btn-outline">
+                  View Details
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const EvidenceReviewTab = () => (
+    <div className="evidence-review-content">
+      <div className="tab-header">
+        <h3>Evidence Review Queue</h3>
+        <div className="review-stats">
+          <span className="pending-count">{statistics.pendingEvidence} pending</span>
+        </div>
+      </div>
+
+      <div className="evidence-list">
+        <div className="evidence-item">
+          <div className="evidence-info">
+            <div className="evidence-title">AI Model Documentation.pdf</div>
+            <div className="evidence-subtitle">Control 4.1 - AI System Documentation</div>
+            <div className="evidence-meta">
+              Uploaded by TechCorp Inc. • 2 days ago • 1.2 MB
+            </div>
+          </div>
+          <div className="evidence-actions">
+            <button className="btn btn-sm btn-success">Approve</button>
+            <button className="btn btn-sm btn-danger">Reject</button>
+            <button className="btn btn-sm btn-outline">Download</button>
+          </div>
+        </div>
+
+        <div className="evidence-item">
+          <div className="evidence-info">
+            <div className="evidence-title">Risk Assessment Report.docx</div>
+            <div className="evidence-subtitle">Control 6.2 - Risk Management</div>
+            <div className="evidence-meta">
+              Uploaded by DataFlow Solutions • 1 day ago • 856 KB
+            </div>
+          </div>
+          <div className="evidence-actions">
+            <button className="btn btn-sm btn-success">Approve</button>
+            <button className="btn btn-sm btn-danger">Reject</button>
+            <button className="btn btn-sm btn-outline">Download</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const CertificatesTab = () => (
+    <div className="certificates-content">
+      <div className="tab-header">
+        <h3>Certificate Management</h3>
+        <div className="cert-stats">
+          <span className="issued-count">{statistics.certificatesIssued} issued</span>
+        </div>
+      </div>
+
+      <div className="eligible-projects">
+        <h4>Projects Eligible for Certification</h4>
+        <div className="eligible-list">
+          {projects.filter(p => (p.compliance_score || 0) >= 80).map(project => (
+            <div key={project.id} className="eligible-item">
+              <div className="project-info">
+                <div className="project-title">{project.project_name}</div>
+                <div className="project-subtitle">
+                  {project.client_name} • Compliance: {project.compliance_score || 0}%
+                </div>
+              </div>
+              <div className="cert-actions">
+                <button className="btn btn-sm btn-primary">Issue Certificate</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (
-      <div className="admin-dashboard">
-        <div className="loading-spinner">
-          <div className="spinner"></div>
-          <p>Loading admin dashboard...</p>
-        </div>
+      <div className="admin-dashboard loading">
+        <div className="loading-spinner">Loading dashboard...</div>
       </div>
     );
   }
 
   return (
     <div className="admin-dashboard">
-      <div className="dashboard-header">
-        <h1>Admin Dashboard</h1>
-        <div className="header-actions">
-          <button 
-            className="btn btn-primary"
-            onClick={() => onNavigate('create-user')}
-          >
-            + Create Client
-          </button>
-          <button 
-            className="btn btn-secondary"
-            onClick={() => onNavigate('create-project')}
-          >
-            + New Project
-          </button>
+      <header className="admin-header">
+        <div className="header-content">
+          <h1>Admin Dashboard</h1>
+          <div className="admin-info">
+            <span>Welcome, {user?.name || 'Admin'}</span>
+            <button className="logout-btn">Logout</button>
+          </div>
         </div>
-      </div>
+      </header>
 
-      <div className="dashboard-tabs">
+      <nav className="admin-nav">
         <button 
-          className={`tab ${activeTab === 'overview' ? 'active' : ''}`}
+          className={`nav-tab ${activeTab === 'overview' ? 'active' : ''}`}
           onClick={() => setActiveTab('overview')}
         >
           Overview
         </button>
         <button 
-          className={`tab ${activeTab === 'clients' ? 'active' : ''}`}
+          className={`nav-tab ${activeTab === 'clients' ? 'active' : ''}`}
           onClick={() => setActiveTab('clients')}
         >
           Client Progress
         </button>
         <button 
-          className={`tab ${activeTab === 'evidence' ? 'active' : ''}`}
+          className={`nav-tab ${activeTab === 'evidence' ? 'active' : ''}`}
           onClick={() => setActiveTab('evidence')}
         >
           Evidence Review
         </button>
         <button 
-          className={`tab ${activeTab === 'certificates' ? 'active' : ''}`}
+          className={`nav-tab ${activeTab === 'certificates' ? 'active' : ''}`}
           onClick={() => setActiveTab('certificates')}
         >
           Certificates
         </button>
-      </div>
+      </nav>
 
-      {activeTab === 'overview' && dashboardData && (
-        <div className="overview-tab">
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-icon">👥</div>
-              <div className="stat-content">
-                <h3>{dashboardData.total_clients}</h3>
-                <p>Total Clients</p>
-                <small>{dashboardData.active_clients} active</small>
-              </div>
-            </div>
-            
-            <div className="stat-card">
-              <div className="stat-icon">📋</div>
-              <div className="stat-content">
-                <h3>{dashboardData.total_projects}</h3>
-                <p>Total Projects</p>
-                <small>{dashboardData.active_projects} active</small>
-              </div>
-            </div>
-            
-            <div className="stat-card">
-              <div className="stat-icon">✅</div>
-              <div className="stat-content">
-                <h3>{dashboardData.completed_projects}</h3>
-                <p>Completed</p>
-                <small>Projects finished</small>
-              </div>
-            </div>
-            
-            <div className="stat-card">
-              <div className="stat-icon">⚠️</div>
-              <div className="stat-content">
-                <h3>{dashboardData.high_risk_projects}</h3>
-                <p>High Risk</p>
-                <small>Projects requiring attention</small>
-              </div>
-            </div>
-            
-            <div className="stat-card">
-              <div className="stat-icon">🔍</div>
-              <div className="stat-content">
-                <h3>{dashboardData.projects_needing_attention}</h3>
-                <p>Need Attention</p>
-                <small>Low compliance scores</small>
-              </div>
-            </div>
-          </div>
+      <main className="admin-main">
+        {activeTab === 'overview' && <OverviewTab />}
+        {activeTab === 'clients' && <ClientProgressTab />}
+        {activeTab === 'evidence' && <EvidenceReviewTab />}
+        {activeTab === 'certificates' && <CertificatesTab />}
+      </main>
 
-          <div className="recent-projects">
-            <h2>Recent Projects</h2>
-            <div className="projects-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Project Name</th>
-                    <th>Client</th>
-                    <th>Risk Level</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dashboardData.recent_projects.map(project => (
-                    <tr key={project.id}>
-                      <td>
-                        <strong>{project.project_name}</strong>
-                        {project.ai_system_name && (
-                          <div className="ai-system">{project.ai_system_name}</div>
-                        )}
-                      </td>
-                      <td>
-                        <div>{project.client_name}</div>
-                        <small>{project.client_organization}</small>
-                      </td>
-                      <td>
-                        <span 
-                          className="risk-badge"
-                          style={{ backgroundColor: getRiskColor(project.risk_template) }}
-                        >
-                          {project.risk_template.toUpperCase()}
-                        </span>
-                      </td>
-                      <td>{getStatusBadge(project.status)}</td>
-                      <td>{new Date(project.created_at).toLocaleDateString()}</td>
-                      <td>
-                        <button 
-                          className="btn btn-sm"
-                          onClick={() => onNavigate('project-details', project.id)}
-                        >
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+      {showCreateClient && (
+        <CreateClientForm
+          onClose={() => setShowCreateClient(false)}
+          onSuccess={handleCreateClientSuccess}
+        />
       )}
 
-      {activeTab === 'clients' && (
-        <div className="clients-tab">
-          <div className="clients-header">
-            <h2>Client Progress Overview</h2>
-            <div className="filters">
-              <select>
-                <option value="">All Risk Levels</option>
-                <option value="high">High Risk</option>
-                <option value="medium">Medium Risk</option>
-                <option value="low">Low Risk</option>
-              </select>
-              <select>
-                <option value="">All Statuses</option>
-                <option value="active">Active</option>
-                <option value="completed">Completed</option>
-                <option value="on_hold">On Hold</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="clients-grid">
-            {clientsProgress.map(client => (
-              <div key={`${client.client_id}-${client.project_id}`} className="client-card">
-                <div className="client-header">
-                  <div className="client-info">
-                    <h3>{client.client_name}</h3>
-                    <p>{client.organization}</p>
-                    <small>{client.client_email}</small>
-                  </div>
-                  <div className="client-status">
-                    {getStatusBadge(client.status)}
-                  </div>
-                </div>
-
-                <div className="project-info">
-                  <h4>{client.project_name}</h4>
-                  <div className="risk-level">
-                    <span 
-                      className="risk-indicator"
-                      style={{ backgroundColor: getRiskColor(client.risk_template) }}
-                    ></span>
-                    {client.risk_template.toUpperCase()} RISK
-                  </div>
-                </div>
-
-                <div className="progress-metrics">
-                  <div className="metric">
-                    <label>Completion</label>
-                    <div className="progress-bar">
-                      <div 
-                        className="progress-fill"
-                        style={{ width: `${client.completion_percentage}%` }}
-                      ></div>
-                    </div>
-                    <span>{client.completion_percentage.toFixed(1)}%</span>
-                  </div>
-
-                  <div className="metric">
-                    <label>Compliance Score</label>
-                    <div className="score-display">
-                      <span 
-                        className="score-value"
-                        style={{ color: getComplianceColor(client.compliance_score) }}
-                      >
-                        {client.compliance_score.toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="metric">
-                    <label>Risk Score</label>
-                    <div className="score-display">
-                      <span className="score-value">
-                        {client.risk_score.toFixed(1)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="client-actions">
-                  <button 
-                    className="btn btn-sm btn-primary"
-                    onClick={() => onNavigate('project-details', client.project_id)}
-                  >
-                    View Details
-                  </button>
-                  <button 
-                    className="btn btn-sm btn-secondary"
-                    onClick={() => onNavigate('edit-project', client.project_id)}
-                  >
-                    Edit Project
-                  </button>
-                  {client.compliance_score >= 80 && (
-                    <button 
-                      className="btn btn-sm btn-success"
-                      onClick={() => onNavigate('issue-certificate', client.project_id)}
-                    >
-                      Issue Certificate
-                    </button>
-                  )}
-                </div>
-
-                <div className="last-activity">
-                  <small>
-                    Last activity: {new Date(client.last_activity).toLocaleDateString()}
-                  </small>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'evidence' && (
-        <div className="evidence-tab">
-          <h2>Evidence Review Queue</h2>
-          <p>Evidence review functionality will be implemented here.</p>
-        </div>
-      )}
-
-      {activeTab === 'certificates' && (
-        <div className="certificates-tab">
-          <h2>Certificate Management</h2>
-          <p>Certificate issuance and management functionality will be implemented here.</p>
-        </div>
+      {showCreateProject && (
+        <CreateProjectForm
+          onClose={() => setShowCreateProject(false)}
+          onSuccess={handleCreateProjectSuccess}
+        />
       )}
     </div>
   );

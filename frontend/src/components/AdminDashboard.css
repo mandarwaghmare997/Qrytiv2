@@ -461,3 +461,80 @@
   }
 }
 
+
+/* Quick Actions */
+.quick-actions {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.quick-actions h3 {
+  margin: 0 0 20px 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+}
+
+.action-btn.primary {
+  background: #6366f1;
+  color: white;
+}
+
+.action-btn.primary:hover {
+  background: #5855eb;
+}
+
+.action-btn.secondary {
+  background: #10b981;
+  color: white;
+}
+
+.action-btn.secondary:hover {
+  background: #059669;
+}
+
+.action-btn.tertiary {
+  background: #f59e0b;
+  color: white;
+}
+
+.action-btn.tertiary:hover {
+  background: #d97706;
+}
+
+.btn-icon {
+  font-size: 1rem;
+}
+
+/* Responsive Design for Quick Actions */
+@media (max-width: 768px) {
+  .action-buttons {
+    flex-direction: column;
+  }
+  
+  .action-btn {
+    justify-content: center;
+  }
+}
+

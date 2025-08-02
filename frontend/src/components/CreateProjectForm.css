@@ -1,0 +1,165 @@
+/* Create Project Form Styles */
+.create-project-form {
+  padding: 0 24px 24px 24px;
+}
+
+.create-project-form .form-group {
+  margin-bottom: 20px;
+}
+
+.create-project-form .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  color: #374151;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.create-project-form .form-group input,
+.create-project-form .form-group select,
+.create-project-form .form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.create-project-form .form-group input:focus,
+.create-project-form .form-group select:focus,
+.create-project-form .form-group textarea:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.create-project-form .form-group input:disabled,
+.create-project-form .form-group select:disabled,
+.create-project-form .form-group textarea:disabled {
+  background: #f9fafb;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.create-project-form .form-group input::placeholder,
+.create-project-form .form-group textarea::placeholder {
+  color: #9ca3af;
+}
+
+.create-project-form .form-group select {
+  cursor: pointer;
+}
+
+.create-project-form .form-group select:disabled {
+  cursor: not-allowed;
+}
+
+.create-project-form .form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.form-help {
+  display: block;
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+/* Risk template specific styling */
+.create-project-form select[name="risk_template"] {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 8px center;
+  background-repeat: no-repeat;
+  background-size: 16px;
+  padding-right: 32px;
+}
+
+/* Date input styling */
+.create-project-form input[type="date"] {
+  position: relative;
+}
+
+.create-project-form input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.create-project-form input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* Form actions styling inherited from CreateClientForm.css */
+.create-project-form .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.create-project-form .btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+}
+
+.create-project-form .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.create-project-form .btn-primary {
+  background: #6366f1;
+  color: white;
+}
+
+.create-project-form .btn-primary:hover:not(:disabled) {
+  background: #5855eb;
+}
+
+.create-project-form .btn-secondary {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.create-project-form .btn-secondary:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* Error message styling inherited from CreateClientForm.css */
+.create-project-form .error-message {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 0.875rem;
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+  .create-project-form {
+    padding: 0 20px 20px 20px;
+  }
+  
+  .create-project-form .form-actions {
+    flex-direction: column-reverse;
+  }
+  
+  .create-project-form .btn {
+    width: 100%;
+  }
+}
+
