@@ -3,6 +3,8 @@ import './App.css';
 import apiService from './services/api.js';
 import config from './config.js';
 import AIModelRegistry from './components/AIModelRegistry.jsx';
+import AdminDashboard from './components/AdminDashboard.jsx';
+import ISO42001Compliance from './components/ISO42001Compliance.jsx';
 import './components/AIModelRegistry.css';
 
 function App() {
@@ -11,7 +13,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [apiStatus, setApiStatus] = useState('checking');
-  const [currentView, setCurrentView] = useState('dashboard'); // dashboard, ai-models
+  const [currentView, setCurrentView] = useState('dashboard'); // dashboard, ai-models, admin, iso-compliance
 
   // Login form state
   const [loginForm, setLoginForm] = useState({
@@ -35,11 +37,38 @@ function App() {
     }
   };
 
-  const checkAuthStatus = () => {
+  const checkAuthStatus = async () => {
     const token = apiService.getToken();
     if (token) {
-      setIsAuthenticated(true);
-      // In a real app, you'd validate the token with the backend
+      try {
+        // Validate token and get user info
+        const response = await fetch(`${config.API_BASE_URL}/auth/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+          setIsAuthenticated(true);
+          
+          // Set default view based on user role
+          if (userData.role === 'admin') {
+            setCurrentView('admin');
+          } else {
+            setCurrentView('dashboard');
+          }
+        } else {
+          // Token is invalid
+          apiService.removeToken();
+          setIsAuthenticated(false);
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        apiService.removeToken();
+        setIsAuthenticated(false);
+      }
     }
   };
 
@@ -128,8 +157,8 @@ function App() {
         <div className="header-content">
           <h1>Qrytiv2 Dashboard</h1>
           <div className="user-info">
-            <span>Welcome, {user?.full_name || 'User'}</span>
-            <span className="user-role">({user?.role || 'user'})</span>
+            <span>Welcome, {user?.name || 'User'}</span>
+            <span className="user-role">({user?.role || 'client'})</span>
             <button onClick={handleLogout} className="logout-button">
               Logout
             </button>
@@ -139,12 +168,15 @@ function App() {
 
       <main className="dashboard-main">
         <div className="dashboard-grid">
-          <div className="dashboard-card">
+          <div className="dashboard-card clickable" onClick={() => setCurrentView('iso-compliance')}>
             <h3>ISO 42001 Compliance</h3>
-            <p>Monitor your AI governance compliance status</p>
+            <p>Start or continue your AI governance compliance journey</p>
             <div className="compliance-score">
-              <span className="score">85%</span>
+              <span className="score">0%</span>
               <span className="score-label">Compliance Score</span>
+            </div>
+            <div className="card-action">
+              <span>Start Journey →</span>
             </div>
           </div>
 
@@ -152,7 +184,7 @@ function App() {
             <h3>AI Model Registry</h3>
             <p>Manage your AI models and their lifecycle</p>
             <div className="stat">
-              <span className="stat-number">12</span>
+              <span className="stat-number">0</span>
               <span className="stat-label">Active Models</span>
             </div>
             <div className="card-action">
@@ -164,7 +196,7 @@ function App() {
             <h3>Risk Assessment</h3>
             <p>Identify and mitigate AI-related risks</p>
             <div className="stat">
-              <span className="stat-number">3</span>
+              <span className="stat-number">0</span>
               <span className="stat-label">High Priority Items</span>
             </div>
           </div>
@@ -173,7 +205,7 @@ function App() {
             <h3>Audit Trail</h3>
             <p>Track all compliance activities and changes</p>
             <div className="stat">
-              <span className="stat-number">247</span>
+              <span className="stat-number">0</span>
               <span className="stat-label">Recent Activities</span>
             </div>
           </div>
@@ -191,17 +223,51 @@ function App() {
     </div>
   );
 
+  const handleNavigation = (view, data) => {
+    setCurrentView(view);
+    // Handle any additional data if needed
+  };
+
   const renderCurrentView = () => {
     if (!isAuthenticated) {
       return <LoginForm />;
     }
 
+    // Admin users see admin dashboard by default
+    if (user?.role === 'admin') {
+      switch (currentView) {
+        case 'ai-models':
+          return (
+            <AIModelRegistry 
+              user={user} 
+              onBack={() => setCurrentView('admin')} 
+            />
+          );
+        case 'admin':
+        default:
+          return (
+            <AdminDashboard 
+              user={user} 
+              onNavigate={handleNavigation}
+            />
+          );
+      }
+    }
+
+    // Client users see client dashboard and modules
     switch (currentView) {
       case 'ai-models':
         return (
           <AIModelRegistry 
             user={user} 
             onBack={() => setCurrentView('dashboard')} 
+          />
+        );
+      case 'iso-compliance':
+        return (
+          <ISO42001Compliance 
+            user={user} 
+            onNavigate={handleNavigation}
           />
         );
       case 'dashboard':

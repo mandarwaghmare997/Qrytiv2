@@ -7,28 +7,32 @@ Developed by: Qryti Dev Team
 
 # Models package
 from .base import Base
-from .user import User
+from .user import User, UserRole
 from .organization import Organization
-from .assessment import Assessment
+from .assessment import Assessment, Question, Evidence, Score
 from .stage import Stage
 from .control import Control
-from .evidence import Evidence
 from .audit_log import AuditLog
 from .ai_model import AIModel
 from .requirement import Requirement, RequirementAssessment, GapAnalysis
+from .project import Project
 
 __all__ = [
     "Base",
     "Organization",
     "User", 
+    "UserRole",
     "Assessment",
+    "Question",
+    "Evidence", 
+    "Score",
     "Stage",
     "Control",
-    "Evidence",
     "AuditLog",
     "AIModel",
     "Requirement",
     "RequirementAssessment", 
-    "GapAnalysis"
+    "GapAnalysis",
+    "Project"
 ]
 
