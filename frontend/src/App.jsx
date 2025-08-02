@@ -104,6 +104,20 @@ function App() {
     setLoading(true);
 
     try {
+      // Demo mode - bypass authentication for testing
+      if (loginForm.email === 'demo@qryti.com' || loginForm.email === 'test@example.com') {
+        const demoUser = {
+          email: loginForm.email,
+          full_name: 'Demo User',
+          organization: 'Demo Organization',
+          role: 'user'
+        };
+        setUser(demoUser);
+        setCurrentView('dashboard');
+        setLoading(false);
+        return;
+      }
+
       const response = await apiService.login(loginForm.email, loginForm.password);
       
       if (response.requires_otp) {
