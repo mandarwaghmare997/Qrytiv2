@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
-import apiService from './services/api.js';
-import config from './config.js';
-import AIModelRegistry from './components/AIModelRegistry.jsx';
-import AdminDashboard from './components/AdminDashboard.jsx';
+import api from './services/api';
+import AdminDashboardNew from './components/AdminDashboardNew';
+import GapAssessmentProfessional from './components/GapAssessmentProfessional';
+import ComplianceReports from './components/ComplianceReports';
+import Certifications from './components/Certifications';
+import OTPVerification from './components/OTPVerification';
 import ISO42001Compliance from './components/ISO42001Compliance.jsx';
-import GapAssessmentProfessional from './components/GapAssessmentProfessional.jsx';
+import MobileNavigation from './components/MobileNavigation';
 import qrytiLogo from './assets/qryti-logo.png';
 import './components/AIModelRegistry.css';
 
@@ -272,26 +274,32 @@ function App() {
                 <div className="card-arrow">→</div>
               </div>
 
-              <div className="dashboard-card">
+              <div className="dashboard-card clickable" onClick={() => handleNavigate('compliance-reports')}>
                 <div className="card-icon">📊</div>
                 <div className="card-content">
                   <h3>Compliance Reports</h3>
                   <p>View your compliance progress and reports</p>
                 </div>
-                <div className="card-status">Coming Soon</div>
+                <div className="card-arrow">→</div>
               </div>
 
-              <div className="dashboard-card">
+              <div className="dashboard-card clickable" onClick={() => handleNavigate('certifications')}>
                 <div className="card-icon">🏆</div>
                 <div className="card-content">
                   <h3>Certifications</h3>
                   <p>Track your certification status</p>
                 </div>
-                <div className="card-status">Coming Soon</div>
+                <div className="card-arrow">→</div>
               </div>
             </div>
           </div>
         </main>
+
+        <MobileNavigation 
+          currentView={currentView}
+          onNavigate={handleNavigate}
+          user={user}
+        />
       </div>
     );
   }
@@ -317,6 +325,20 @@ function App() {
         <GapAssessmentProfessional 
           user={user} 
           onNavigate={handleNavigate}
+          onLogout={handleLogout}
+        />
+      )}
+      {currentView === 'compliance-reports' && (
+        <ComplianceReports 
+          user={user} 
+          onBack={() => handleNavigate('dashboard')}
+          onLogout={handleLogout}
+        />
+      )}
+      {currentView === 'certifications' && (
+        <Certifications 
+          user={user} 
+          onBack={() => handleNavigate('dashboard')}
           onLogout={handleLogout}
         />
       )}
