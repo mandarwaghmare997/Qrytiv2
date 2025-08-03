@@ -2,8 +2,8 @@
 // API endpoints and environment settings
 
 const config = {
-  // API Base URL - Production EC2 backend
-  API_BASE_URL: 'http://15.206.179.17',
+  // API Base URL - Production EC2 backend via CloudFlare Tunnel (HTTPS)
+  API_BASE_URL: 'https://expects-regulations-machinery-stakeholders.trycloudflare.com',
   
   // Environment
   ENVIRONMENT: 'production',
