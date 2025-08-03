@@ -2,8 +2,8 @@
 // API endpoints and environment settings
 
 const config = {
-  // API Base URL - Production backend
-  API_BASE_URL: 'https://5000-izdpeagn1j4mfrnvhdjpn-70f7ccea.manusvm.computer',
+  // API Base URL - Production EC2 backend
+  API_BASE_URL: 'http://15.206.179.17',
   
   // Environment
   ENVIRONMENT: 'production',

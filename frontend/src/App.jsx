@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
-import api from './services/mockApi';
+import api from './services/api';
 import config from './config';
 import AdminDashboard from './components/AdminDashboard';
 import AdminDashboardNew from './components/AdminDashboardNew';
@@ -48,10 +48,42 @@ function App() {
     const token = api.getToken();
     const storedUser = api.getUser();
     
-    if (token && storedUser) {
-      // Use stored user data for mock API
-      setUser(storedUser);
-      setIsAuthenticated(true);
+    if (token) {
+      // If we have stored user data, use it immediately
+      if (storedUser) {
+        setUser(storedUser);
+        setIsAuthenticated(true);
+      }
+      
+      try {
+        // Validate token and get fresh user info
+        const response = await fetch(`${config.API_BASE_URL}/api/v1/auth/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+          setIsAuthenticated(true);
+          // Update stored user data
+          api.setToken(token, userData);
+        } else {
+          // Token is invalid, remove it
+          api.removeToken();
+          setUser(null);
+          setIsAuthenticated(false);
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        // If we have stored user data, keep the session active
+        if (!storedUser) {
+          api.removeToken();
+          setUser(null);
+          setIsAuthenticated(false);
+        }
+      }
     }
   };
 
