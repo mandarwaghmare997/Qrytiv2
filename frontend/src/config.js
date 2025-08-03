@@ -2,8 +2,8 @@
 // API endpoints and environment settings
 
 const config = {
-  // API Base URL - Production EC2 backend via CloudFlare Tunnel (Working Backend)
-  API_BASE_URL: 'https://points-steal-combined-blame.trycloudflare.com',
+  // API Base URL - Production EC2 backend via CloudFlare Tunnel (CORS Fixed)
+  API_BASE_URL: 'https://fair-sells-emotional-horse.trycloudflare.com',
   
   // Environment
   ENVIRONMENT: 'production',

@@ -22,8 +22,12 @@ logger = logging.getLogger(__name__)
 # Create Flask application
 app = Flask(__name__)
 
-# Enable CORS for all routes
-CORS(app, origins=["*"])
+# Enable CORS with specific origins to avoid conflicts with Nginx
+CORS(app, 
+     origins=["https://app.qryti.com", "http://localhost:3000"],
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     supports_credentials=True)
 
 # Configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
