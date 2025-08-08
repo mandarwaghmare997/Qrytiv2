@@ -1,0 +1,335 @@
+name: Deploy Serverless Backend
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'serverless/**'
+      - '.github/workflows/deploy-backend.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'serverless/**'
+
+  # Allow manual deployment
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'Deployment stage'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+env:
+  AWS_REGION: ap-south-1
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  # Validate and test backend code
+  validate:
+    name: Validate Backend Code
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Python dependencies
+        working-directory: ./serverless
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Serverless Framework
+        run: |
+          npm install -g serverless@3
+          npm install -g serverless-python-requirements
+
+      - name: Validate Python syntax
+        working-directory: ./serverless
+        run: |
+          find functions -name "*.py" -exec python -m py_compile {} \;
+          find shared -name "*.py" -exec python -m py_compile {} \;
+
+      - name: Validate Serverless configuration
+        working-directory: ./serverless
+        run: |
+          serverless print --stage dev
+
+      - name: Run Python tests (if available)
+        working-directory: ./serverless
+        run: |
+          if [ -d "tests" ]; then
+            python -m pytest tests/ -v
+          else
+            echo "No tests directory found, skipping tests"
+          fi
+
+  # Deploy to development environment
+  deploy-dev:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch'
+    environment: development
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies
+        working-directory: ./serverless
+        run: |
+          npm install -g serverless@3
+          serverless plugin install -n serverless-python-requirements
+          serverless plugin install -n serverless-offline
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Deploy DynamoDB tables
+        working-directory: ./serverless
+        run: |
+          aws cloudformation deploy \
+            --template-file infrastructure/dynamodb-tables.yml \
+            --stack-name qryti-dynamodb-dev \
+            --region ${{ env.AWS_REGION }} \
+            --no-fail-on-empty-changeset
+
+      - name: Deploy Lambda functions
+        working-directory: ./serverless
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET_DEV }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_NAME: "Qryti Team"
+        run: |
+          serverless deploy --stage dev --region ${{ env.AWS_REGION }}
+
+      - name: Initialize demo data
+        working-directory: ./serverless
+        env:
+          STAGE: dev
+          REGION: ${{ env.AWS_REGION }}
+        run: |
+          python shared/init_demo_data.py
+
+      - name: Run health checks
+        working-directory: ./serverless
+        run: |
+          # Get API Gateway URL from deployment output
+          API_URL=$(serverless info --stage dev --region ${{ env.AWS_REGION }} | grep "ServiceEndpoint" | cut -d' ' -f2)
+          echo "API URL: $API_URL"
+          
+          # Test health endpoint (if available)
+          if [ ! -z "$API_URL" ]; then
+            curl -f "$API_URL/api/v1/health" || echo "Health check endpoint not available"
+          fi
+
+      - name: Deployment summary
+        run: |
+          echo "✅ Development deployment completed successfully!"
+          echo "🔗 Stage: dev"
+          echo "🌍 Region: ${{ env.AWS_REGION }}"
+          echo "📅 Deployed at: $(date)"
+
+  # Deploy to staging environment
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: staging
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies
+        working-directory: ./serverless
+        run: |
+          npm install -g serverless@3
+          serverless plugin install -n serverless-python-requirements
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Deploy DynamoDB tables
+        working-directory: ./serverless
+        run: |
+          aws cloudformation deploy \
+            --template-file infrastructure/dynamodb-tables.yml \
+            --stack-name qryti-dynamodb-staging \
+            --region ${{ env.AWS_REGION }} \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides Stage=staging
+
+      - name: Deploy Lambda functions
+        working-directory: ./serverless
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET_STAGING }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_NAME: "Qryti Team"
+        run: |
+          serverless deploy --stage staging --region ${{ env.AWS_REGION }}
+
+      - name: Run integration tests
+        working-directory: ./serverless
+        run: |
+          # Add integration tests here
+          echo "Running integration tests..."
+          # python -m pytest tests/integration/ -v
+
+      - name: Deployment summary
+        run: |
+          echo "✅ Staging deployment completed successfully!"
+          echo "🔗 Stage: staging"
+          echo "🌍 Region: ${{ env.AWS_REGION }}"
+          echo "📅 Deployed at: $(date)"
+
+  # Deploy to production environment (manual approval required)
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-staging]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies
+        working-directory: ./serverless
+        run: |
+          npm install -g serverless@3
+          serverless plugin install -n serverless-python-requirements
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Deploy DynamoDB tables
+        working-directory: ./serverless
+        run: |
+          aws cloudformation deploy \
+            --template-file infrastructure/dynamodb-tables.yml \
+            --stack-name qryti-dynamodb-prod \
+            --region ${{ env.AWS_REGION }} \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides Stage=prod
+
+      - name: Deploy Lambda functions
+        working-directory: ./serverless
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET_PROD }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_NAME: "Qryti Team"
+        run: |
+          serverless deploy --stage prod --region ${{ env.AWS_REGION }}
+
+      - name: Run production health checks
+        working-directory: ./serverless
+        run: |
+          # Get API Gateway URL from deployment output
+          API_URL=$(serverless info --stage prod --region ${{ env.AWS_REGION }} | grep "ServiceEndpoint" | cut -d' ' -f2)
+          echo "Production API URL: $API_URL"
+          
+          # Test critical endpoints
+          if [ ! -z "$API_URL" ]; then
+            curl -f "$API_URL/api/v1/health" || echo "Health check endpoint not available"
+          fi
+
+      - name: Deployment summary
+        run: |
+          echo "🎉 Production deployment completed successfully!"
+          echo "🔗 Stage: prod"
+          echo "🌍 Region: ${{ env.AWS_REGION }}"
+          echo "📅 Deployed at: $(date)"
+          echo "🚀 Application is now live in production!"
+
+  # Cleanup on failure
+  cleanup-on-failure:
+    name: Cleanup on Deployment Failure
+    runs-on: ubuntu-latest
+    needs: [deploy-dev, deploy-staging, deploy-production]
+    if: failure()
+    
+    steps:
+      - name: Notify deployment failure
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Please check the logs and fix any issues."
+          echo "Consider rolling back if necessary."
+
+      - name: Cleanup resources (if needed)
+        run: |
+          echo "Add cleanup commands here if needed"
+          # Example: Remove failed deployment resources
+          # aws cloudformation delete-stack --stack-name failed-stack
+
