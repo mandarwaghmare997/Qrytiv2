@@ -1,0 +1,28 @@
+# Requirements for Qrytiv2 Serverless Lambda Functions
+
+# Core dependencies
+PyJWT==2.8.0
+bcrypt==4.1.2
+
+# AWS SDK (already available in Lambda runtime, but specified for local development)
+boto3>=1.34.0
+botocore>=1.34.0
+
+# Utilities
+python-dateutil==2.8.2
+
+# For local testing and development
+pytest==7.4.4
+pytest-mock==3.12.0
+moto==4.2.14
+
+# For report generation (if needed)
+reportlab==4.0.8
+Pillow==10.2.0
+
+# For data validation
+pydantic==2.5.3
+
+# For JSON handling with Decimal support
+simplejson==3.19.2
+

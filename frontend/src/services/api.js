@@ -128,6 +128,36 @@ class ApiService {
     return this.request(config.ENDPOINTS.USERS);
   }
 
+  // Get clients
+  async getClients() {
+    return this.request(config.ENDPOINTS.CLIENTS, { auth: false });
+  }
+
+  // Generic HTTP methods
+  async get(endpoint, options = {}) {
+    return this.request(endpoint, { ...options, method: 'GET' });
+  }
+
+  async post(endpoint, data, options = {}) {
+    return this.request(endpoint, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async put(endpoint, data, options = {}) {
+    return this.request(endpoint, {
+      ...options,
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async delete(endpoint, options = {}) {
+    return this.request(endpoint, { ...options, method: 'DELETE' });
+  }
+
   // Get app info
   async getAppInfo() {
     return this.request(config.ENDPOINTS.INFO, { auth: false });

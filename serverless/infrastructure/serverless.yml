@@ -1,0 +1,322 @@
+# Serverless Framework Configuration for Qrytiv2
+# Deploys Lambda functions and API Gateway
+
+service: qrytiv2-serverless
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: python3.9
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'ap-south-1'}
+  memorySize: 256
+  timeout: 30
+  
+  # Environment variables
+  environment:
+    STAGE: ${self:provider.stage}
+    REGION: ${self:provider.region}
+    USERS_TABLE: qryti-users-${self:provider.stage}
+    CLIENTS_TABLE: qryti-clients-${self:provider.stage}
+    MODELS_TABLE: qryti-models-${self:provider.stage}
+    REPORTS_TABLE: qryti-reports-${self:provider.stage}
+    SESSIONS_TABLE: qryti-sessions-${self:provider.stage}
+    JWT_SECRET: ${env:JWT_SECRET, 'qryti-dev-secret-change-in-production'}
+    SENDER_EMAIL: ${env:SENDER_EMAIL, 'no-reply@qryti.com'}
+    SENDER_NAME: ${env:SENDER_NAME, 'Qryti Team'}
+    S3_BUCKET: qryti-reports-${self:provider.stage}
+
+  # IAM permissions
+  iam:
+    role:
+      statements:
+        # DynamoDB permissions
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - arn:aws:dynamodb:${self:provider.region}:*:table/qryti-*
+            - arn:aws:dynamodb:${self:provider.region}:*:table/qryti-*/index/*
+        
+        # SES permissions
+        - Effect: Allow
+          Action:
+            - ses:SendEmail
+            - ses:SendRawEmail
+          Resource: "*"
+        
+        # S3 permissions
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:DeleteObject
+          Resource: arn:aws:s3:::qryti-reports-${self:provider.stage}/*
+        
+        # CloudWatch Logs
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: arn:aws:logs:${self:provider.region}:*:*
+
+  # API Gateway configuration
+  apiGateway:
+    restApiId: ${env:API_GATEWAY_ID, ''}
+    restApiRootResourceId: ${env:API_GATEWAY_ROOT_RESOURCE_ID, ''}
+    minimumCompressionSize: 1024
+    shouldStartNameWithService: true
+
+# Package configuration
+package:
+  patterns:
+    - '!node_modules/**'
+    - '!.git/**'
+    - '!.pytest_cache/**'
+    - '!tests/**'
+    - '!*.md'
+    - '!.env*'
+
+# Lambda functions
+functions:
+  # Authentication functions
+  auth-login:
+    handler: functions/auth/login.lambda_handler
+    events:
+      - http:
+          path: /api/v1/auth/login
+          method: post
+          cors: true
+    layers:
+      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}
+
+  auth-register:
+    handler: functions/auth/register.lambda_handler
+    events:
+      - http:
+          path: /api/v1/auth/register
+          method: post
+          cors: true
+    layers:
+      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}
+
+  auth-verify:
+    handler: functions/auth/verify-token.lambda_handler
+    events:
+      - http:
+          path: /api/v1/auth/verify
+          method: get
+          cors: true
+    layers:
+      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}
+
+  # User functions
+  users-profile:
+    handler: functions/users/profile.lambda_handler
+    events:
+      - http:
+          path: /api/v1/users/profile
+          method: get
+          cors: true
+      - http:
+          path: /api/v1/users/profile
+          method: put
+          cors: true
+    layers:
+      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}
+
+  # Client functions
+  clients-list:
+    handler: functions/clients/list-clients.lambda_handler
+    events:
+      - http:
+          path: /api/v1/clients
+          method: get
+          cors: true
+    layers:
+      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}
+
+  clients-create:
+    handler: functions/clients/create-client.lambda_handler
+    events:
+      - http:
+          path: /api/v1/clients
+          method: post
+          cors: true
+    layers:
+      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}
+
+  # AI Model functions
+  models-register:
+    handler: functions/models/register-model.lambda_handler
+    events:
+      - http:
+          path: /api/v1/models
+          method: post
+          cors: true
+    layers:
+      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}
+
+  models-list:
+    handler: functions/models/list-models.lambda_handler
+    events:
+      - http:
+          path: /api/v1/models
+          method: get
+          cors: true
+    layers:
+      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}
+
+  models-update:
+    handler: functions/models/update-model.lambda_handler
+    events:
+      - http:
+          path: /api/v1/models/{model_id}
+          method: put
+          cors: true
+    layers:
+      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}
+
+  # Report functions
+  reports-generate:
+    handler: functions/reports/generate-report.lambda_handler
+    timeout: 60
+    events:
+      - http:
+          path: /api/v1/reports/generate
+          method: post
+          cors: true
+    layers:
+      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}
+
+  reports-list:
+    handler: functions/reports/list-reports.lambda_handler
+    events:
+      - http:
+          path: /api/v1/reports
+          method: get
+          cors: true
+    layers:
+      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}
+
+  reports-download:
+    handler: functions/reports/download-report.lambda_handler
+    events:
+      - http:
+          path: /api/v1/reports/{report_id}/download
+          method: get
+          cors: true
+    layers:
+      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}
+
+  # Email functions
+  email-welcome:
+    handler: functions/email/send-welcome.lambda_handler
+    events:
+      - http:
+          path: /api/v1/email/welcome
+          method: post
+          cors: true
+    layers:
+      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}
+
+# Resources
+resources:
+  Resources:
+    # S3 Bucket for reports
+    ReportsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: qryti-reports-${self:provider.stage}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        VersioningConfiguration:
+          Status: Enabled
+        LifecycleConfiguration:
+          Rules:
+            - Id: DeleteOldReports
+              Status: Enabled
+              ExpirationInDays: 90
+        Tags:
+          - Key: Project
+            Value: Qryti
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Component
+            Value: Storage
+
+    # API Gateway CORS configuration
+    GatewayResponseDefault4XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: ApiGatewayRestApi
+
+    GatewayResponseDefault5XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+        ResponseType: DEFAULT_5XX
+        RestApiId:
+          Ref: ApiGatewayRestApi
+
+  Outputs:
+    ApiGatewayRestApiId:
+      Value:
+        Ref: ApiGatewayRestApi
+      Export:
+        Name: ${self:service}-${self:provider.stage}-ApiGatewayRestApiId
+
+    ApiGatewayRestApiRootResourceId:
+      Value:
+        Fn::GetAtt:
+          - ApiGatewayRestApi
+          - RootResourceId
+      Export:
+        Name: ${self:service}-${self:provider.stage}-ApiGatewayRestApiRootResourceId
+
+    ServiceEndpoint:
+      Value:
+        Fn::Join:
+          - ''
+          - - 'https://'
+            - Ref: ApiGatewayRestApi
+            - '.execute-api.'
+            - ${self:provider.region}
+            - '.amazonaws.com/'
+            - ${self:provider.stage}
+      Export:
+        Name: ${self:service}-${self:provider.stage}-ServiceEndpoint
+
+# Plugins
+plugins:
+  - serverless-python-requirements
+  - serverless-offline
+
+# Custom configuration
+custom:
+  pythonRequirements:
+    dockerizePip: non-linux
+    layer: true
+    slim: true
+    strip: false
+    noDeps:
+      - boto3
+      - botocore
+

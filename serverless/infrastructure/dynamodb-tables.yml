@@ -1,0 +1,241 @@
+# DynamoDB Tables for Qrytiv2 Serverless
+# CloudFormation template for creating DynamoDB tables
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'DynamoDB tables for Qrytiv2 serverless application'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'dev'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: 'Environment name'
+
+Resources:
+  # Users Table
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'qryti-users-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: email
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: EmailIndex
+          KeySchema:
+            - AttributeName: email
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: Qryti
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Component
+          Value: Database
+
+  # Clients Table
+  ClientsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'qryti-clients-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: Qryti
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Component
+          Value: Database
+
+  # AI Models Table
+  ModelsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'qryti-models-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: client_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: ClientIndex
+          KeySchema:
+            - AttributeName: client_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: Qryti
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Component
+          Value: Database
+
+  # Reports Table
+  ReportsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'qryti-reports-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: user_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: UserIndex
+          KeySchema:
+            - AttributeName: user_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: Qryti
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Component
+          Value: Database
+
+  # Sessions Table (for token blacklisting if needed)
+  SessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'qryti-sessions-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: Qryti
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Component
+          Value: Database
+
+Outputs:
+  UsersTableName:
+    Description: 'Name of the Users table'
+    Value: !Ref UsersTable
+    Export:
+      Name: !Sub '${AWS::StackName}-UsersTable'
+
+  ClientsTableName:
+    Description: 'Name of the Clients table'
+    Value: !Ref ClientsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-ClientsTable'
+
+  ModelsTableName:
+    Description: 'Name of the Models table'
+    Value: !Ref ModelsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-ModelsTable'
+
+  ReportsTableName:
+    Description: 'Name of the Reports table'
+    Value: !Ref ReportsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-ReportsTable'
+
+  SessionsTableName:
+    Description: 'Name of the Sessions table'
+    Value: !Ref SessionsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-SessionsTable'
+
+  UsersTableArn:
+    Description: 'ARN of the Users table'
+    Value: !GetAtt UsersTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-UsersTableArn'
+
+  ClientsTableArn:
+    Description: 'ARN of the Clients table'
+    Value: !GetAtt ClientsTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ClientsTableArn'
+
+  ModelsTableArn:
+    Description: 'ARN of the Models table'
+    Value: !GetAtt ModelsTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ModelsTableArn'
+
+  ReportsTableArn:
+    Description: 'ARN of the Reports table'
+    Value: !GetAtt ReportsTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ReportsTableArn'
+
+  SessionsTableArn:
+    Description: 'ARN of the Sessions table'
+    Value: !GetAtt SessionsTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-SessionsTableArn'
+

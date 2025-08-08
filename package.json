@@ -32,7 +32,9 @@
     "clean:backend": "cd backend && find . -type d -name __pycache__ -delete"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "serverless-offline": "^14.4.0",
+    "serverless-python-requirements": "^6.1.2"
   },
   "keywords": [
     "iso-42001",
@@ -52,4 +54,3 @@
     "npm": ">=8.0.0"
   }
 }
-

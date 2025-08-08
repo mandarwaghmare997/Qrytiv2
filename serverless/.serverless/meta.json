@@ -1,0 +1,515 @@
+{
+  "/home/ubuntu/Qrytiv2/serverless/serverless.yml": {
+    "versionFramework": "4.18.0",
+    "servicePath": "/home/ubuntu/Qrytiv2/serverless/serverless.yml",
+    "serviceConfigFileName": "serverless.yml",
+    "service": {
+      "service": "qrytiv2-serverless",
+      "frameworkVersion": "4",
+      "provider": {
+        "name": "aws",
+        "runtime": "python3.9",
+        "stage": "${opt:stage, 'dev'}",
+        "region": "ap-south-1",
+        "memorySize": 256,
+        "timeout": 30,
+        "environment": {
+          "STAGE": "${self:provider.stage}",
+          "REGION": "${self:provider.region}",
+          "USERS_TABLE": "qryti-users-${self:provider.stage}",
+          "CLIENTS_TABLE": "qryti-clients-${self:provider.stage}",
+          "MODELS_TABLE": "qryti-models-${self:provider.stage}",
+          "REPORTS_TABLE": "qryti-reports-${self:provider.stage}",
+          "SESSIONS_TABLE": "qryti-sessions-${self:provider.stage}",
+          "JWT_SECRET": "<REDACTED>",
+          "SENDER_EMAIL": "${env:SENDER_EMAIL, 'no-reply@qryti.com'}",
+          "SENDER_NAME": "${env:SENDER_NAME, 'Qryti Team'}",
+          "S3_BUCKET": "qryti-reports-${self:provider.stage}"
+        },
+        "iam": {
+          "role": {
+            "statements": [
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "dynamodb:Query",
+                  "dynamodb:Scan",
+                  "dynamodb:GetItem",
+                  "dynamodb:PutItem",
+                  "dynamodb:UpdateItem",
+                  "dynamodb:DeleteItem"
+                ],
+                "Resource": [
+                  "arn:aws:dynamodb:${self:provider.region}:*:table/qryti-*",
+                  "arn:aws:dynamodb:${self:provider.region}:*:table/qryti-*/index/*"
+                ]
+              },
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "ses:SendEmail",
+                  "ses:SendRawEmail"
+                ],
+                "Resource": "*"
+              },
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "s3:GetObject",
+                  "s3:PutObject",
+                  "s3:DeleteObject"
+                ],
+                "Resource": "arn:aws:s3:::qryti-reports-${self:provider.stage}/*"
+              },
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "logs:CreateLogGroup",
+                  "logs:CreateLogStream",
+                  "logs:PutLogEvents"
+                ],
+                "Resource": "arn:aws:logs:${self:provider.region}:*:*"
+              }
+            ]
+          }
+        },
+        "apiGateway": {
+          "restApiId": "${env:API_GATEWAY_ID, ''}",
+          "restApiRootResourceId": "${env:API_GATEWAY_ROOT_RESOURCE_ID, ''}",
+          "minimumCompressionSize": 1024,
+          "shouldStartNameWithService": true
+        }
+      },
+      "package": {
+        "patterns": [
+          "!node_modules/**",
+          "!.git/**",
+          "!.pytest_cache/**",
+          "!tests/**",
+          "!*.md",
+          "!.env*"
+        ]
+      },
+      "functions": {
+        "auth-login": {
+          "handler": "functions/auth/login.lambda_handler",
+          "events": [
+            {
+              "http": {
+                "path": "/api/v1/auth/login",
+                "method": "post",
+                "cors": true
+              }
+            }
+          ],
+          "layers": [
+            "${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}"
+          ]
+        },
+        "auth-register": {
+          "handler": "functions/auth/register.lambda_handler",
+          "events": [
+            {
+              "http": {
+                "path": "/api/v1/auth/register",
+                "method": "post",
+                "cors": true
+              }
+            }
+          ],
+          "layers": [
+            "${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}"
+          ]
+        },
+        "auth-verify": {
+          "handler": "functions/auth/verify-token.lambda_handler",
+          "events": [
+            {
+              "http": {
+                "path": "/api/v1/auth/verify",
+                "method": "get",
+                "cors": true
+              }
+            }
+          ],
+          "layers": [
+            "${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}"
+          ]
+        },
+        "users-profile": {
+          "handler": "functions/users/profile.lambda_handler",
+          "events": [
+            {
+              "http": {
+                "path": "/api/v1/users/profile",
+                "method": "get",
+                "cors": true
+              }
+            },
+            {
+              "http": {
+                "path": "/api/v1/users/profile",
+                "method": "put",
+                "cors": true
+              }
+            }
+          ],
+          "layers": [
+            "${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}"
+          ]
+        },
+        "clients-list": {
+          "handler": "functions/clients/list-clients.lambda_handler",
+          "events": [
+            {
+              "http": {
+                "path": "/api/v1/clients",
+                "method": "get",
+                "cors": true
+              }
+            }
+          ],
+          "layers": [
+            "${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}"
+          ]
+        },
+        "clients-create": {
+          "handler": "functions/clients/create-client.lambda_handler",
+          "events": [
+            {
+              "http": {
+                "path": "/api/v1/clients",
+                "method": "post",
+                "cors": true
+              }
+            }
+          ],
+          "layers": [
+            "${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}"
+          ]
+        },
+        "models-register": {
+          "handler": "functions/models/register-model.lambda_handler",
+          "events": [
+            {
+              "http": {
+                "path": "/api/v1/models",
+                "method": "post",
+                "cors": true
+              }
+            }
+          ],
+          "layers": [
+            "${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}"
+          ]
+        },
+        "models-list": {
+          "handler": "functions/models/list-models.lambda_handler",
+          "events": [
+            {
+              "http": {
+                "path": "/api/v1/models",
+                "method": "get",
+                "cors": true
+              }
+            }
+          ],
+          "layers": [
+            "${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}"
+          ]
+        },
+        "models-update": {
+          "handler": "functions/models/update-model.lambda_handler",
+          "events": [
+            {
+              "http": {
+                "path": "/api/v1/models/{model_id}",
+                "method": "put",
+                "cors": true
+              }
+            }
+          ],
+          "layers": [
+            "${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}"
+          ]
+        },
+        "reports-generate": {
+          "handler": "functions/reports/generate-report.lambda_handler",
+          "timeout": 60,
+          "events": [
+            {
+              "http": {
+                "path": "/api/v1/reports/generate",
+                "method": "post",
+                "cors": true
+              }
+            }
+          ],
+          "layers": [
+            "${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}"
+          ]
+        },
+        "reports-list": {
+          "handler": "functions/reports/list-reports.lambda_handler",
+          "events": [
+            {
+              "http": {
+                "path": "/api/v1/reports",
+                "method": "get",
+                "cors": true
+              }
+            }
+          ],
+          "layers": [
+            "${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}"
+          ]
+        },
+        "reports-download": {
+          "handler": "functions/reports/download-report.lambda_handler",
+          "events": [
+            {
+              "http": {
+                "path": "/api/v1/reports/{report_id}/download",
+                "method": "get",
+                "cors": true
+              }
+            }
+          ],
+          "layers": [
+            "${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}"
+          ]
+        },
+        "email-welcome": {
+          "handler": "functions/email/send-welcome.lambda_handler",
+          "events": [
+            {
+              "http": {
+                "path": "/api/v1/email/welcome",
+                "method": "post",
+                "cors": true
+              }
+            }
+          ],
+          "layers": [
+            "${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}"
+          ]
+        }
+      },
+      "resources": {
+        "Resources": {
+          "ReportsBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+              "BucketName": "qryti-reports-${self:provider.stage}",
+              "PublicAccessBlockConfiguration": {
+                "BlockPublicAcls": true,
+                "BlockPublicPolicy": true,
+                "IgnorePublicAcls": true,
+                "RestrictPublicBuckets": true
+              },
+              "VersioningConfiguration": {
+                "Status": "Enabled"
+              },
+              "LifecycleConfiguration": {
+                "Rules": [
+                  {
+                    "Id": "DeleteOldReports",
+                    "Status": "Enabled",
+                    "ExpirationInDays": 90
+                  }
+                ]
+              },
+              "Tags": [
+                {
+                  "Key": "Project",
+                  "Value": "Qryti"
+                },
+                {
+                  "Key": "Environment",
+                  "Value": "${self:provider.stage}"
+                },
+                {
+                  "Key": "Component",
+                  "Value": "Storage"
+                }
+              ]
+            }
+          },
+          "GatewayResponseDefault4XX": {
+            "Type": "AWS::ApiGateway::GatewayResponse",
+            "Properties": {
+              "ResponseParameters": {
+                "gatewayresponse.header.Access-Control-Allow-Origin": "'*'",
+                "gatewayresponse.header.Access-Control-Allow-Headers": "'*'"
+              },
+              "ResponseType": "DEFAULT_4XX",
+              "RestApiId": {
+                "Ref": "ApiGatewayRestApi"
+              }
+            }
+          },
+          "GatewayResponseDefault5XX": {
+            "Type": "AWS::ApiGateway::GatewayResponse",
+            "Properties": {
+              "ResponseParameters": {
+                "gatewayresponse.header.Access-Control-Allow-Origin": "'*'",
+                "gatewayresponse.header.Access-Control-Allow-Headers": "'*'"
+              },
+              "ResponseType": "DEFAULT_5XX",
+              "RestApiId": {
+                "Ref": "ApiGatewayRestApi"
+              }
+            }
+          }
+        },
+        "Outputs": {
+          "ApiGatewayRestApiId": {
+            "Value": {
+              "Ref": "ApiGatewayRestApi"
+            },
+            "Export": {
+              "Name": "${self:service}-${self:provider.stage}-ApiGatewayRestApiId"
+            }
+          },
+          "ApiGatewayRestApiRootResourceId": {
+            "Value": {
+              "Fn::GetAtt": [
+                "ApiGatewayRestApi",
+                "RootResourceId"
+              ]
+            },
+            "Export": {
+              "Name": "${self:service}-${self:provider.stage}-ApiGatewayRestApiRootResourceId"
+            }
+          },
+          "ServiceEndpoint": {
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "https://",
+                  {
+                    "Ref": "ApiGatewayRestApi"
+                  },
+                  ".execute-api.",
+                  "${self:provider.region}",
+                  ".amazonaws.com/",
+                  "${self:provider.stage}"
+                ]
+              ]
+            },
+            "Export": {
+              "Name": "${self:service}-${self:provider.stage}-ServiceEndpoint"
+            }
+          }
+        }
+      },
+      "plugins": [
+        "serverless-python-requirements",
+        "serverless-offline"
+      ],
+      "custom": {
+        "pythonRequirements": {
+          "dockerizePip": "non-linux",
+          "layer": true,
+          "slim": true,
+          "strip": false,
+          "noDeps": [
+            "boto3",
+            "botocore"
+          ]
+        }
+      }
+    },
+    "provider": {
+      "name": "aws",
+      "runtime": "python3.9",
+      "stage": "${opt:stage, 'dev'}",
+      "region": "ap-south-1",
+      "memorySize": 256,
+      "timeout": 30,
+      "environment": {
+        "STAGE": "${self:provider.stage}",
+        "REGION": "${self:provider.region}",
+        "USERS_TABLE": "qryti-users-${self:provider.stage}",
+        "CLIENTS_TABLE": "qryti-clients-${self:provider.stage}",
+        "MODELS_TABLE": "qryti-models-${self:provider.stage}",
+        "REPORTS_TABLE": "qryti-reports-${self:provider.stage}",
+        "SESSIONS_TABLE": "qryti-sessions-${self:provider.stage}",
+        "JWT_SECRET": "<REDACTED>",
+        "SENDER_EMAIL": "${env:SENDER_EMAIL, 'no-reply@qryti.com'}",
+        "SENDER_NAME": "${env:SENDER_NAME, 'Qryti Team'}",
+        "S3_BUCKET": "qryti-reports-${self:provider.stage}"
+      },
+      "iam": {
+        "role": {
+          "statements": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:Query",
+                "dynamodb:Scan",
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem",
+                "dynamodb:DeleteItem"
+              ],
+              "Resource": [
+                "arn:aws:dynamodb:${self:provider.region}:*:table/qryti-*",
+                "arn:aws:dynamodb:${self:provider.region}:*:table/qryti-*/index/*"
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "ses:SendEmail",
+                "ses:SendRawEmail"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:DeleteObject"
+              ],
+              "Resource": "arn:aws:s3:::qryti-reports-${self:provider.stage}/*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": "arn:aws:logs:${self:provider.region}:*:*"
+            }
+          ]
+        }
+      },
+      "apiGateway": {
+        "restApiId": "${env:API_GATEWAY_ID, ''}",
+        "restApiRootResourceId": "${env:API_GATEWAY_ROOT_RESOURCE_ID, ''}",
+        "minimumCompressionSize": 1024,
+        "shouldStartNameWithService": true
+      }
+    },
+    "error": {
+      "message": "You must sign in or use a license key with Serverless Framework V.4 and later versions. Please use \"serverless login\".",
+      "stack": "Error: You must sign in or use a license key with Serverless Framework V.4 and later versions. Please use \"serverless login\".\n    at Authentication.getAuthenticatedData (file:///home/ubuntu/.serverless/releases/4.18.0/package/dist/sf-core.js:806:10899)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async Authentication.authenticate (file:///home/ubuntu/.serverless/releases/4.18.0/package/dist/sf-core.js:808:22245)\n    at async TraditionalRunner.resolveVariablesAndAuthenticate (file:///home/ubuntu/.serverless/releases/4.18.0/package/dist/sf-core.js:812:2379)\n    at async TraditionalRunner.run (file:///home/ubuntu/.serverless/releases/4.18.0/package/dist/sf-core.js:1428:27914)\n    at async route (file:///home/ubuntu/.serverless/releases/4.18.0/package/dist/sf-core.js:1603:2878)\n    at async Object.run (file:///home/ubuntu/.serverless/releases/4.18.0/package/dist/sf-core.js:1604:3661)\n    at async run2 (file:///home/ubuntu/.serverless/releases/4.18.0/package/dist/sf-core.js:1604:4815)"
+    },
+    "serviceRawFile": "# Serverless Framework Configuration for Qrytiv2\n# Deploys Lambda functions and API Gateway\n\nservice: qrytiv2-serverless\n\nframeworkVersion: '4'\n\nprovider:\n  name: aws\n  runtime: python3.9\n  stage: ${opt:stage, 'dev'}\n  region: ${opt:region, 'ap-south-1'}\n  memorySize: 256\n  timeout: 30\n  \n  # Environment variables\n  environment:\n    STAGE: ${self:provider.stage}\n    REGION: ${self:provider.region}\n    USERS_TABLE: qryti-users-${self:provider.stage}\n    CLIENTS_TABLE: qryti-clients-${self:provider.stage}\n    MODELS_TABLE: qryti-models-${self:provider.stage}\n    REPORTS_TABLE: qryti-reports-${self:provider.stage}\n    SESSIONS_TABLE: qryti-sessions-${self:provider.stage}\n    JWT_SECRET: ${env:JWT_SECRET, 'qryti-dev-secret-change-in-production'}\n    SENDER_EMAIL: ${env:SENDER_EMAIL, 'no-reply@qryti.com'}\n    SENDER_NAME: ${env:SENDER_NAME, 'Qryti Team'}\n    S3_BUCKET: qryti-reports-${self:provider.stage}\n\n  # IAM permissions\n  iam:\n    role:\n      statements:\n        # DynamoDB permissions\n        - Effect: Allow\n          Action:\n            - dynamodb:Query\n            - dynamodb:Scan\n            - dynamodb:GetItem\n            - dynamodb:PutItem\n            - dynamodb:UpdateItem\n            - dynamodb:DeleteItem\n          Resource:\n            - arn:aws:dynamodb:${self:provider.region}:*:table/qryti-*\n            - arn:aws:dynamodb:${self:provider.region}:*:table/qryti-*/index/*\n        \n        # SES permissions\n        - Effect: Allow\n          Action:\n            - ses:SendEmail\n            - ses:SendRawEmail\n          Resource: \"*\"\n        \n        # S3 permissions\n        - Effect: Allow\n          Action:\n            - s3:GetObject\n            - s3:PutObject\n            - s3:DeleteObject\n          Resource: arn:aws:s3:::qryti-reports-${self:provider.stage}/*\n        \n        # CloudWatch Logs\n        - Effect: Allow\n          Action:\n            - logs:CreateLogGroup\n            - logs:CreateLogStream\n            - logs:PutLogEvents\n          Resource: arn:aws:logs:${self:provider.region}:*:*\n\n  # API Gateway configuration\n  apiGateway:\n    restApiId: ${env:API_GATEWAY_ID, ''}\n    restApiRootResourceId: ${env:API_GATEWAY_ROOT_RESOURCE_ID, ''}\n    minimumCompressionSize: 1024\n    shouldStartNameWithService: true\n\n# Package configuration\npackage:\n  patterns:\n    - '!node_modules/**'\n    - '!.git/**'\n    - '!.pytest_cache/**'\n    - '!tests/**'\n    - '!*.md'\n    - '!.env*'\n\n# Lambda functions\nfunctions:\n  # Authentication functions\n  auth-login:\n    handler: functions/auth/login.lambda_handler\n    events:\n      - http:\n          path: /api/v1/auth/login\n          method: post\n          cors: true\n    layers:\n      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}\n\n  auth-register:\n    handler: functions/auth/register.lambda_handler\n    events:\n      - http:\n          path: /api/v1/auth/register\n          method: post\n          cors: true\n    layers:\n      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}\n\n  auth-verify:\n    handler: functions/auth/verify-token.lambda_handler\n    events:\n      - http:\n          path: /api/v1/auth/verify\n          method: get\n          cors: true\n    layers:\n      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}\n\n  # User functions\n  users-profile:\n    handler: functions/users/profile.lambda_handler\n    events:\n      - http:\n          path: /api/v1/users/profile\n          method: get\n          cors: true\n      - http:\n          path: /api/v1/users/profile\n          method: put\n          cors: true\n    layers:\n      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}\n\n  # Client functions\n  clients-list:\n    handler: functions/clients/list-clients.lambda_handler\n    events:\n      - http:\n          path: /api/v1/clients\n          method: get\n          cors: true\n    layers:\n      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}\n\n  clients-create:\n    handler: functions/clients/create-client.lambda_handler\n    events:\n      - http:\n          path: /api/v1/clients\n          method: post\n          cors: true\n    layers:\n      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}\n\n  # AI Model functions\n  models-register:\n    handler: functions/models/register-model.lambda_handler\n    events:\n      - http:\n          path: /api/v1/models\n          method: post\n          cors: true\n    layers:\n      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}\n\n  models-list:\n    handler: functions/models/list-models.lambda_handler\n    events:\n      - http:\n          path: /api/v1/models\n          method: get\n          cors: true\n    layers:\n      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}\n\n  models-update:\n    handler: functions/models/update-model.lambda_handler\n    events:\n      - http:\n          path: /api/v1/models/{model_id}\n          method: put\n          cors: true\n    layers:\n      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}\n\n  # Report functions\n  reports-generate:\n    handler: functions/reports/generate-report.lambda_handler\n    timeout: 60\n    events:\n      - http:\n          path: /api/v1/reports/generate\n          method: post\n          cors: true\n    layers:\n      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}\n\n  reports-list:\n    handler: functions/reports/list-reports.lambda_handler\n    events:\n      - http:\n          path: /api/v1/reports\n          method: get\n          cors: true\n    layers:\n      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}\n\n  reports-download:\n    handler: functions/reports/download-report.lambda_handler\n    events:\n      - http:\n          path: /api/v1/reports/{report_id}/download\n          method: get\n          cors: true\n    layers:\n      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}\n\n  # Email functions\n  email-welcome:\n    handler: functions/email/send-welcome.lambda_handler\n    events:\n      - http:\n          path: /api/v1/email/welcome\n          method: post\n          cors: true\n    layers:\n      - ${cf:qryti-shared-layer-${self:provider.stage}.SharedLayerExport}\n\n# Resources\nresources:\n  Resources:\n    # S3 Bucket for reports\n    ReportsBucket:\n      Type: AWS::S3::Bucket\n      Properties:\n        BucketName: qryti-reports-${self:provider.stage}\n        PublicAccessBlockConfiguration:\n          BlockPublicAcls: true\n          BlockPublicPolicy: true\n          IgnorePublicAcls: true\n          RestrictPublicBuckets: true\n        VersioningConfiguration:\n          Status: Enabled\n        LifecycleConfiguration:\n          Rules:\n            - Id: DeleteOldReports\n              Status: Enabled\n              ExpirationInDays: 90\n        Tags:\n          - Key: Project\n            Value: Qryti\n          - Key: Environment\n            Value: ${self:provider.stage}\n          - Key: Component\n            Value: Storage\n\n    # API Gateway CORS configuration\n    GatewayResponseDefault4XX:\n      Type: AWS::ApiGateway::GatewayResponse\n      Properties:\n        ResponseParameters:\n          gatewayresponse.header.Access-Control-Allow-Origin: \"'*'\"\n          gatewayresponse.header.Access-Control-Allow-Headers: \"'*'\"\n        ResponseType: DEFAULT_4XX\n        RestApiId:\n          Ref: ApiGatewayRestApi\n\n    GatewayResponseDefault5XX:\n      Type: AWS::ApiGateway::GatewayResponse\n      Properties:\n        ResponseParameters:\n          gatewayresponse.header.Access-Control-Allow-Origin: \"'*'\"\n          gatewayresponse.header.Access-Control-Allow-Headers: \"'*'\"\n        ResponseType: DEFAULT_5XX\n        RestApiId:\n          Ref: ApiGatewayRestApi\n\n  Outputs:\n    ApiGatewayRestApiId:\n      Value:\n        Ref: ApiGatewayRestApi\n      Export:\n        Name: ${self:service}-${self:provider.stage}-ApiGatewayRestApiId\n\n    ApiGatewayRestApiRootResourceId:\n      Value:\n        Fn::GetAtt:\n          - ApiGatewayRestApi\n          - RootResourceId\n      Export:\n        Name: ${self:service}-${self:provider.stage}-ApiGatewayRestApiRootResourceId\n\n    ServiceEndpoint:\n      Value:\n        Fn::Join:\n          - ''\n          - - 'https://'\n            - Ref: ApiGatewayRestApi\n            - '.execute-api.'\n            - ${self:provider.region}\n            - '.amazonaws.com/'\n            - ${self:provider.stage}\n      Export:\n        Name: ${self:service}-${self:provider.stage}-ServiceEndpoint\n\n# Plugins\nplugins:\n  - serverless-python-requirements\n  - serverless-offline\n\n# Custom configuration\ncustom:\n  pythonRequirements:\n    dockerizePip: non-linux\n    layer: true\n    slim: true\n    strip: false\n    noDeps:\n      - boto3\n      - botocore\n\n",
+    "command": [
+      "print"
+    ],
+    "options": {
+      "stage": "dev"
+    },
+    "serviceProviderAwsCfStackId": null,
+    "serviceProviderAwsCfStackCreated": null,
+    "serviceProviderAwsCfStackUpdated": null,
+    "serviceProviderAwsCfStackStatus": null,
+    "serviceProviderAwsCfStackOutputs": null
+  }
+}

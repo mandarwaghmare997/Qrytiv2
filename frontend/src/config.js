@@ -2,47 +2,25 @@
 // API endpoints and environment settings
 
 const config = {
-  // API Base URL - Production EC2 backend via CloudFlare Tunnel (CORS Fixed)
-  API_BASE_URL: 'https://fair-sells-emotional-horse.trycloudflare.com',
+  // API Base URL - Email-enabled backend via CloudFlare tunnel
+  API_BASE_URL: 'https://ethiopia-have-alternatively-remark.trycloudflare.com',
   
   // Environment
   ENVIRONMENT: 'production',
   
   // API Endpoints
   ENDPOINTS: {
-    HEALTH: '/health',
     LOGIN: '/api/v1/auth/login',
     REGISTER: '/api/v1/auth/register',
-    USERS: '/api/v1/users/',
-    INFO: '/api/v1/info',
-    DOCS: '/api/docs',
-    SEND_OTP: '/api/v1/auth/send-otp',
-    VERIFY_OTP: '/api/v1/auth/verify-otp'
+    USERS: '/api/v1/users',
+    CLIENTS: '/api/v1/clients',
+    HEALTH: '/health',
+    DOCS: '/api/docs'
   },
   
-  // Admin credentials
-  ADMIN_CREDENTIALS: {
-    email: 'hello@qryti.com',
-    password: 'Mandar@123'
-  },
-  
-  // Demo credentials
-  DEMO_CREDENTIALS: {
-    email: 'user@demo.qryti.com',
-    password: 'demo123'
-  },
-  
-  // App settings
+  // Application Settings
   APP_NAME: 'Qrytiv2',
-  VERSION: '2.0.0',
-  
-  // Features
-  FEATURES: {
-    AUTHENTICATION: true,
-    DEMO_MODE: true,
-    OFFLINE_MODE: false,
-    OTP_VERIFICATION: true
-  }
+  VERSION: '2.0.0'
 };
 
 export default config;

@@ -1,6 +1,6 @@
 """
-Qrytiv2 Simple Backend API
-Lightweight Flask application for production deployment
+Qrytiv2 Backend with Database Integration
+Enhanced Flask application with SQLite database support
 
 Developed by: Qryti Dev Team
 """
@@ -11,6 +11,9 @@ import os
 import logging
 import time
 from datetime import datetime
+
+# Import database models
+from models import db, User, Client, Project, init_database
 
 # Import email service
 from email_service_enhanced import email_service
@@ -33,27 +36,12 @@ CORS(app,
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['DEBUG'] = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 
-# Demo users for authentication
-DEMO_USERS = {
-    "hello@qryti.com": {
-        "password": "Mandar@123",
-        "role": "admin",
-        "full_name": "Qryti Admin",
-        "organization": "Qryti"
-    },
-    "admin@demo.qryti.com": {
-        "password": "admin123",
-        "role": "admin",
-        "full_name": "Admin User",
-        "organization": "Qryti Demo Organization"
-    },
-    "user@demo.qryti.com": {
-        "password": "demo123", 
-        "role": "user",
-        "full_name": "Demo User",
-        "organization": "Qryti Demo Organization"
-    }
-}
+# Database configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///qryti.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Initialize database
+db.init_app(app)
 
 @app.route('/')
 def root():
@@ -64,23 +52,43 @@ def root():
         "status": "operational",
         "docs": "/api/docs",
         "health": "/health",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
+        "database": "SQLite with persistence"
     })
 
 @app.route('/health')
 def health_check():
     """Health check endpoint"""
-    return jsonify({
-        "status": "healthy",
-        "version": "2.0.0",
-        "environment": "production",
-        "timestamp": time.time(),
-        "uptime": "operational"
-    })
+    try:
+        # Test database connection
+        user_count = User.query.count()
+        client_count = Client.query.count()
+        
+        return jsonify({
+            "status": "healthy",
+            "version": "2.0.0",
+            "environment": "production",
+            "timestamp": time.time(),
+            "uptime": "operational",
+            "database": {
+                "status": "connected",
+                "users": user_count,
+                "clients": client_count
+            }
+        })
+    except Exception as e:
+        logger.error(f"Health check error: {e}")
+        return jsonify({
+            "status": "unhealthy",
+            "version": "2.0.0",
+            "environment": "production",
+            "timestamp": time.time(),
+            "error": str(e)
+        }), 500
 
 @app.route('/api/v1/auth/login', methods=['POST'])
 def login():
-    """Login endpoint"""
+    """Login endpoint with database authentication"""
     try:
         data = request.get_json()
         
@@ -93,21 +101,19 @@ def login():
         if not email or not password:
             return jsonify({"detail": "Email and password required"}), 400
             
-        # Check demo users
-        if email in DEMO_USERS:
-            user = DEMO_USERS[email]
-            if user['password'] == password:
-                # Return success response with token
-                return jsonify({
-                    "access_token": f"demo-token-{email.split('@')[0]}",
-                    "token_type": "bearer",
-                    "user": {
-                        "email": email,
-                        "full_name": user['full_name'],
-                        "role": user['role'],
-                        "organization": user['organization']
-                    }
-                })
+        # Find user in database
+        user = User.query.filter_by(email=email, is_active=True).first()
+        
+        if user and user.check_password(password):
+            # Update last login
+            user.update_last_login()
+            
+            # Return success response with token
+            return jsonify({
+                "access_token": f"db-token-{user.id}-{int(time.time())}",
+                "token_type": "bearer",
+                "user": user.to_dict()
+            })
         
         return jsonify({"detail": "Invalid email or password"}), 401
         
@@ -115,9 +121,43 @@ def login():
         logger.error(f"Login error: {e}")
         return jsonify({"detail": "Login failed. Please try again."}), 500
 
+@app.route('/api/v1/auth/me', methods=['GET'])
+def get_current_user():
+    """Get current user information from token"""
+    try:
+        # Get authorization header
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({"detail": "Authorization token required"}), 401
+        
+        # Extract token
+        token = auth_header.split(' ')[1]
+        
+        # Parse token to get user ID (format: db-token-{user_id}-{timestamp})
+        try:
+            token_parts = token.split('-')
+            if len(token_parts) >= 3 and token_parts[0] == 'db' and token_parts[1] == 'token':
+                user_id = int(token_parts[2])
+                
+                # Find user in database
+                user = User.query.filter_by(id=user_id, is_active=True).first()
+                if user:
+                    return jsonify(user.to_dict())
+                else:
+                    return jsonify({"detail": "User not found"}), 404
+            else:
+                return jsonify({"detail": "Invalid token format"}), 401
+                
+        except (ValueError, IndexError):
+            return jsonify({"detail": "Invalid token"}), 401
+            
+    except Exception as e:
+        logger.error(f"Get current user error: {e}")
+        return jsonify({"detail": "Failed to get user information"}), 500
+
 @app.route('/api/v1/auth/register', methods=['POST'])
 def register():
-    """Registration endpoint"""
+    """Registration endpoint with database persistence and email"""
     try:
         data = request.get_json()
         
@@ -133,70 +173,147 @@ def register():
             return jsonify({"detail": "All fields required: email, password, full_name, organization_name"}), 400
             
         # Check if user already exists
-        if email in DEMO_USERS:
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
             return jsonify({"detail": "User with this email already exists"}), 400
             
-        # For demo purposes, just return success
+        # Create new user
+        new_user = User(
+            email=email,
+            password=password,
+            full_name=full_name,
+            organization=organization_name,
+            role='user'
+        )
+        
+        # Save to database
+        db.session.add(new_user)
+        db.session.commit()
+        
+        # Send welcome email
+        try:
+            email_success = email_service.send_welcome_email(
+                email, 
+                full_name, 
+                organization_name
+            )
+            email_status = "sent" if email_success else "failed"
+        except Exception as e:
+            logger.error(f"Email sending error: {e}")
+            email_status = "failed"
+        
         return jsonify({
-            "message": "Registration successful. Please check your email for verification.",
-            "user": {
-                "email": email,
-                "full_name": full_name,
-                "organization": organization_name
-            }
+            "message": "Registration successful. Welcome to Qryti!",
+            "user": new_user.to_dict(),
+            "email_status": email_status
         })
         
     except Exception as e:
         logger.error(f"Registration error: {e}")
+        db.session.rollback()
         return jsonify({"detail": "Registration failed. Please try again."}), 500
 
-@app.route('/api/v1/users/', methods=['GET'])
-def list_users():
-    """List users endpoint (requires authentication)"""
-    auth_header = request.headers.get('Authorization')
-    
-    if not auth_header or not auth_header.startswith('Bearer '):
-        return jsonify({"detail": "Authentication required"}), 401
+@app.route('/api/v1/clients', methods=['GET'])
+def get_clients():
+    """Get all active clients"""
+    try:
+        clients = Client.query.filter_by(is_active=True).all()
+        return jsonify([client.to_dict() for client in clients])
+    except Exception as e:
+        logger.error(f"Get clients error: {e}")
+        return jsonify({"detail": "Failed to fetch clients"}), 500
+
+@app.route('/api/v1/clients', methods=['POST'])
+def create_client():
+    """Create a new client"""
+    try:
+        data = request.get_json()
         
-    # For demo purposes, return demo users
-    users = []
-    for email, user_data in DEMO_USERS.items():
-        users.append({
-            "email": email,
-            "full_name": user_data['full_name'],
-            "role": user_data['role'],
-            "organization": user_data['organization'],
-            "is_active": True,
-            "is_verified": True
+        if not data:
+            return jsonify({"detail": "Request body required"}), 400
+        
+        name = data.get('name')
+        if not name:
+            return jsonify({"detail": "Client name is required"}), 400
+        
+        # Create new client
+        new_client = Client(
+            name=name,
+            description=data.get('description', ''),
+            contact_email=data.get('contact_email'),
+            contact_phone=data.get('contact_phone')
+        )
+        
+        db.session.add(new_client)
+        db.session.commit()
+        
+        return jsonify({
+            "message": "Client created successfully",
+            "client": new_client.to_dict()
         })
-    
-    return jsonify(users)
+        
+    except Exception as e:
+        logger.error(f"Create client error: {e}")
+        db.session.rollback()
+        return jsonify({"detail": "Failed to create client"}), 500
 
-@app.route('/api/v1/info')
-def app_info():
-    """Application information endpoint"""
-    return jsonify({
-        "app_name": "Qrytiv2",
-        "version": "2.0.0",
-        "environment": "production",
-        "debug": app.config['DEBUG'],
-        "features": {
-            "authentication": True,
-            "user_management": True,
-            "demo_mode": True,
-            "cors_enabled": True
-        },
-        "endpoints": {
-            "health": "/health",
-            "login": "/api/v1/auth/login",
-            "register": "/api/v1/auth/register",
-            "users": "/api/v1/users/"
-        }
-    })
+@app.route('/api/v1/projects', methods=['POST'])
+def create_project():
+    """Create a new project"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"detail": "Request body required"}), 400
+        
+        name = data.get('name')
+        client_id = data.get('client_id')
+        created_by = data.get('created_by', 1)  # Default to first user
+        
+        if not all([name, client_id]):
+            return jsonify({"detail": "Project name and client_id are required"}), 400
+        
+        # Verify client exists
+        client = Client.query.get(client_id)
+        if not client:
+            return jsonify({"detail": "Client not found"}), 404
+        
+        # Create new project
+        new_project = Project(
+            name=name,
+            description=data.get('description', ''),
+            client_id=client_id,
+            created_by=created_by,
+            status=data.get('status', 'active')
+        )
+        
+        db.session.add(new_project)
+        db.session.commit()
+        
+        return jsonify({
+            "message": "Project created successfully",
+            "project": new_project.to_dict()
+        })
+        
+    except Exception as e:
+        logger.error(f"Create project error: {e}")
+        db.session.rollback()
+        return jsonify({"detail": "Failed to create project"}), 500
 
+@app.route('/api/v1/users', methods=['GET'])
+def get_users():
+    """Get all users (admin only)"""
+    try:
+        users = User.query.filter_by(is_active=True).all()
+        return jsonify([user.to_dict() for user in users])
+    except Exception as e:
+        logger.error(f"Get users error: {e}")
+        return jsonify({"detail": "Failed to fetch users"}), 500
+
+# OTP endpoints (keeping existing functionality)
 @app.route('/api/v1/auth/send-otp', methods=['POST'])
 def send_otp():
-    """Send OTP to email for verification"""
+    """Send OTP for authentication"""
     try:
         data = request.get_json()
         
@@ -245,22 +362,19 @@ def verify_otp():
         is_valid = email_service.verify_otp(email, otp)
         
         if is_valid:
-            # Check if user exists in demo users
-            if email in DEMO_USERS:
-                user = DEMO_USERS[email]
+            # Check if user exists in database
+            user = User.query.filter_by(email=email, is_active=True).first()
+            
+            if user:
+                user.update_last_login()
                 return jsonify({
-                    "access_token": f"demo-token-{email.split('@')[0]}",
+                    "access_token": f"otp-token-{user.id}-{int(time.time())}",
                     "token_type": "bearer",
-                    "user": {
-                        "email": email,
-                        "full_name": user['full_name'],
-                        "role": user['role'],
-                        "organization": user['organization']
-                    },
+                    "user": user.to_dict(),
                     "message": "OTP verified successfully"
                 })
             else:
-                # For non-demo users, create a basic user profile
+                # For non-registered users, create a basic user profile
                 return jsonify({
                     "access_token": f"verified-token-{email.split('@')[0]}",
                     "token_type": "bearer",
@@ -285,26 +399,38 @@ def api_docs():
     return jsonify({
         "title": "Qrytiv2 API Documentation",
         "version": "2.0.0",
-        "description": "ISO 42001 AI Governance Platform API",
+        "description": "ISO 42001 AI Governance Platform API with Database Persistence",
         "endpoints": {
-            "GET /": "Root endpoint with API information",
-            "GET /health": "Health check endpoint",
-            "POST /api/v1/auth/login": "User authentication",
-            "POST /api/v1/auth/register": "User registration",
-            "POST /api/v1/auth/send-otp": "Send OTP for email verification",
-            "POST /api/v1/auth/verify-otp": "Verify OTP and complete authentication",
-            "GET /api/v1/users/": "List users (authenticated)",
-            "GET /api/v1/info": "Application information"
+            "authentication": {
+                "POST /api/v1/auth/login": "Login with email and password",
+                "POST /api/v1/auth/register": "Register new user with email verification",
+                "POST /api/v1/auth/send-otp": "Send OTP for verification",
+                "POST /api/v1/auth/verify-otp": "Verify OTP code"
+            },
+            "users": {
+                "GET /api/v1/users": "Get all users (admin only)"
+            },
+            "clients": {
+                "GET /api/v1/clients": "Get all clients",
+                "POST /api/v1/clients": "Create new client"
+            },
+            "projects": {
+                "POST /api/v1/projects": "Create new project"
+            },
+            "system": {
+                "GET /health": "Health check with database status",
+                "GET /api/docs": "This documentation"
+            }
         },
-        "demo_users": {
+        "demo_credentials": {
             "hello@qryti.com": "Mandar@123",
             "admin@demo.qryti.com": "admin123",
             "user@demo.qryti.com": "demo123"
         },
-        "otp_flow": {
-            "1": "POST /api/v1/auth/send-otp with email",
-            "2": "Check email for OTP code (or console in demo mode)",
-            "3": "POST /api/v1/auth/verify-otp with email and OTP"
+        "database": {
+            "type": "SQLite",
+            "persistence": "Enabled",
+            "models": ["User", "Client", "Project"]
         }
     })
 
@@ -328,291 +454,12 @@ def log_response(response):
     return response
 
 if __name__ == '__main__':
+    # Initialize database with demo data
+    init_database(app)
+    
     port = int(os.environ.get('PORT', 5000))
     host = os.environ.get('HOST', '0.0.0.0')
     
-    logger.info(f"Starting Qrytiv2 API on {host}:{port}")
-    app.run(host=host, port=port, debug=app.config['DEBUG'])
-
-
-
-# Mock data storage
-CLIENTS = []
-PROJECTS = []
-
-@app.route('/api/v1/admin/clients', methods=['GET'])
-def get_clients():
-    """Get all clients (admin only)"""
-    auth_header = request.headers.get('Authorization')
-    
-    if not auth_header or not auth_header.startswith('Bearer '):
-        return jsonify({"detail": "Authentication required"}), 401
-    
-    return jsonify(CLIENTS)
-
-@app.route('/api/v1/admin/clients', methods=['POST'])
-def create_client():
-    """Create a new client (admin only)"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({"detail": "Authentication required"}), 401
-        
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({"detail": "Request body required"}), 400
-        
-        # Required fields
-        required_fields = ['name', 'email', 'password', 'organization', 'department']
-        for field in required_fields:
-            if not data.get(field):
-                return jsonify({"detail": f"Field '{field}' is required"}), 400
-        
-        # Check if client already exists
-        for client in CLIENTS:
-            if client['email'] == data['email']:
-                return jsonify({"detail": "Client with this email already exists"}), 400
-        
-        # Create new client
-        client_id = len(CLIENTS) + 1
-        new_client = {
-            "id": client_id,
-            "name": data['name'],
-            "email": data['email'],
-            "organization": data['organization'],
-            "department": data['department'],
-            "is_active": True,
-            "created_at": datetime.utcnow().isoformat(),
-            "compliance_score": 0,
-            "projects_count": 0
-        }
-        
-        CLIENTS.append(new_client)
-        
-        # Create default project for the client
-        project_id = len(PROJECTS) + 1
-        default_project = {
-            "id": project_id,
-            "name": f"ISO 42001 Compliance - {data['organization']}",
-            "client_id": client_id,
-            "client_name": data['name'],
-            "client_organization": data['organization'],
-            "ai_system_name": f"{data['organization']} AI System",
-            "risk_level": "medium",
-            "target_completion": "2025-12-31",
-            "description": f"ISO 42001 compliance project for {data['organization']}",
-            "status": "active",
-            "progress": 0,
-            "compliance_score": 0,
-            "created_at": datetime.utcnow().isoformat()
-        }
-        
-        PROJECTS.append(default_project)
-        
-        # Update client projects count
-        new_client['projects_count'] = 1
-        
-        logger.info(f"Client created: {data['email']}")
-        
-        return jsonify({
-            "message": "Client created successfully",
-            "client": new_client,
-            "project": default_project
-        }), 201
-        
-    except Exception as e:
-        logger.error(f"Create client error: {e}")
-        return jsonify({"detail": "Failed to create client"}), 500
-
-@app.route('/api/v1/admin/clients/<int:client_id>', methods=['DELETE'])
-def delete_client(client_id):
-    """Delete a client (admin only)"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({"detail": "Authentication required"}), 401
-        
-        global CLIENTS, PROJECTS
-        
-        # Find and remove client
-        CLIENTS = [c for c in CLIENTS if c['id'] != client_id]
-        
-        # Remove associated projects
-        PROJECTS = [p for p in PROJECTS if p['client_id'] != client_id]
-        
-        return jsonify({"message": "Client deleted successfully"})
-        
-    except Exception as e:
-        logger.error(f"Delete client error: {e}")
-        return jsonify({"detail": "Failed to delete client"}), 500
-
-@app.route('/api/v1/admin/projects', methods=['GET'])
-def get_projects():
-    """Get all projects (admin only)"""
-    auth_header = request.headers.get('Authorization')
-    
-    if not auth_header or not auth_header.startswith('Bearer '):
-        return jsonify({"detail": "Authentication required"}), 401
-    
-    return jsonify(PROJECTS)
-
-@app.route('/api/v1/admin/projects', methods=['POST'])
-def create_project():
-    """Create a new project (admin only)"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({"detail": "Authentication required"}), 401
-        
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({"detail": "Request body required"}), 400
-        
-        # Required fields
-        required_fields = ['client_id', 'name', 'ai_system_name', 'risk_level']
-        for field in required_fields:
-            if not data.get(field):
-                return jsonify({"detail": f"Field '{field}' is required"}), 400
-        
-        # Find client
-        client = None
-        for c in CLIENTS:
-            if c['id'] == data['client_id']:
-                client = c
-                break
-        
-        if not client:
-            return jsonify({"detail": "Client not found"}), 404
-        
-        # Create new project
-        project_id = len(PROJECTS) + 1
-        new_project = {
-            "id": project_id,
-            "name": data['name'],
-            "client_id": data['client_id'],
-            "client_name": client['name'],
-            "client_organization": client['organization'],
-            "ai_system_name": data['ai_system_name'],
-            "risk_level": data['risk_level'],
-            "target_completion": data.get('target_completion', '2025-12-31'),
-            "description": data.get('description', ''),
-            "status": "active",
-            "progress": 0,
-            "compliance_score": 0,
-            "created_at": datetime.utcnow().isoformat()
-        }
-        
-        PROJECTS.append(new_project)
-        
-        # Update client projects count
-        client['projects_count'] = len([p for p in PROJECTS if p['client_id'] == client['id']])
-        
-        logger.info(f"Project created: {data['name']}")
-        
-        return jsonify({
-            "message": "Project created successfully",
-            "project": new_project
-        }), 201
-        
-    except Exception as e:
-        logger.error(f"Create project error: {e}")
-        return jsonify({"detail": "Failed to create project"}), 500
-
-@app.route('/api/v1/admin/projects/<int:project_id>', methods=['DELETE'])
-def delete_project(project_id):
-    """Delete a project (admin only)"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({"detail": "Authentication required"}), 401
-        
-        global CLIENTS, PROJECTS
-        
-        # Find project to get client_id
-        project_to_delete = None
-        for p in PROJECTS:
-            if p['id'] == project_id:
-                project_to_delete = p
-                break
-        
-        if not project_to_delete:
-            return jsonify({"detail": "Project not found"}), 404
-        
-        # Remove project
-        PROJECTS = [p for p in PROJECTS if p['id'] != project_id]
-        
-        # Update client projects count
-        client_id = project_to_delete['client_id']
-        for client in CLIENTS:
-            if client['id'] == client_id:
-                client['projects_count'] = len([p for p in PROJECTS if p['client_id'] == client_id])
-                break
-        
-        return jsonify({"message": "Project deleted successfully"})
-        
-    except Exception as e:
-        logger.error(f"Delete project error: {e}")
-        return jsonify({"detail": "Failed to delete project"}), 500
-
-@app.route('/api/v1/admin/stats', methods=['GET'])
-def get_admin_stats():
-    """Get admin dashboard statistics"""
-    auth_header = request.headers.get('Authorization')
-    
-    if not auth_header or not auth_header.startswith('Bearer '):
-        return jsonify({"detail": "Authentication required"}), 401
-    
-    # Calculate statistics
-    total_clients = len(CLIENTS)
-    total_projects = len(PROJECTS)
-    active_projects = len([p for p in PROJECTS if p['status'] == 'active'])
-    avg_compliance = sum([c.get('compliance_score', 0) for c in CLIENTS]) / max(total_clients, 1)
-    
-    return jsonify({
-        "total_clients": total_clients,
-        "total_projects": total_projects,
-        "active_projects": active_projects,
-        "avg_compliance_score": round(avg_compliance, 1),
-        "recent_activity": [
-            {
-                "type": "client_created",
-                "message": f"New client registered: {CLIENTS[-1]['name']}" if CLIENTS else "No recent activity",
-                "timestamp": CLIENTS[-1]['created_at'] if CLIENTS else datetime.utcnow().isoformat()
-            }
-        ]
-    })
-
-
-
-# Error handlers
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({"detail": "Endpoint not found"}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({"detail": "Internal server error"}), 500
-
-# Request logging middleware
-@app.before_request
-def log_request():
-    logger.info(f"{request.method} {request.path} - {request.remote_addr}")
-
-@app.after_request
-def log_response(response):
-    logger.info(f"Response: {response.status_code}")
-    return response
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    host = os.environ.get('HOST', '0.0.0.0')
-    
-    logger.info(f"Starting Qrytiv2 API on {host}:{port}")
+    logger.info(f"Starting Qrytiv2 API with Database on {host}:{port}")
     app.run(host=host, port=port, debug=app.config['DEBUG'])
 
